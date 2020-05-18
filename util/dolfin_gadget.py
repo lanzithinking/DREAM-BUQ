@@ -82,7 +82,7 @@ def vec2fun(vec,V):
  
 def mat2fun(mat,V):
     """
-    Convert a matrix to a dolfin mixed function such that each column corresponds to a component function.
+    Convert a matrix (multiple vectors) to a dolfin mixed function such that each column corresponds to a component function.
     """
     k = mat.shape[1]
     # mixed functions to store functions
@@ -93,4 +93,36 @@ def mat2fun(mat,V):
     for i,dof_i in enumerate(dofs):
         f.vector()[dof_i]=mat[:,i]
     return f,dofs
+
+def fun2imag(f):
+    """
+    Obtain the pixel matrix of an image from a dolfin function
+    """
+    mesh = f.function_space().mesh()
+    gdim = mesh.geometry().dim()
+    # DG0 cellwise function
+    if f.vector().size() == mesh.num_cells():
+        C = f.vector().get_local()
+    # Scalar function, interpolated to vertices
+    elif f.value_rank() == 0:
+        C = f.compute_vertex_values(mesh)
+    # Vector function, interpolated to vertices
+    elif f.value_rank() == 1:
+        w0 = f.compute_vertex_values(mesh)
+        nv = mesh.num_vertices()
+        if len(w0) != gdim * nv:
+            raise AttributeError('Vector length must match geometric dimension.')
+#         X = mesh.coordinates()
+#         X = [X[:, i] for i in range(gdim)]
+        U = [w0[i * nv: (i + 1) * nv] for i in range(gdim)]
+        # Compute magnitude
+        C = U[0]**2
+        for i in range(1, gdim):
+            C += U[i]**2
+        C = np.sqrt(C)
+    else:
+        raise AttributeError('Wrong function input!')
+    imsz = np.floor(C.size**(1./gdim)).astype('int')
+    im_shape=(-1,)+(imsz,)*(gdim-1)
+    return C.reshape(im_shape)
     
