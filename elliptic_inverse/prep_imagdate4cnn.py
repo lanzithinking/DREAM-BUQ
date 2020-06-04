@@ -8,7 +8,7 @@ import numpy as np
 
 import os,sys
 sys.path.append( "../" )
-from util.dolfin_gadget import fun2imag
+from util.dolfin_gadget import fun2img
 import pickle
 
 # def retrieve_each_sample(f,samp_f,s):
@@ -40,7 +40,7 @@ def retrieve_ensemble(mpi_comm,V,dir_name,f_name,ensbl_sz,max_iter,im_shape):
         for j in range(ensbl_sz):
             f.read(ensbl_f,'iter{0}_ensbl{1}'.format(n+1,j))
             s=n*ensbl_sz+j
-            imag[s,:,:]=fun2imag(ensbl_f)
+            imag[s,:,:]=fun2img(ensbl_f)
             if s+1 in prog:
                 print('{0:.0f}% ensembles have been retrieved.'.format(np.float(s+1)/num_ensbls*100))
     f.close()
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     # define the inverse problem
     np.random.seed(2020)
     nx=40; ny=40
-    SNR=10
+    SNR=100
     elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
     # algorithms
     algs=['EKI','EKS']

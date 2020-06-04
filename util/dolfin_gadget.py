@@ -94,7 +94,7 @@ def mat2fun(mat,V):
         f.vector()[dof_i]=mat[:,i]
     return f,dofs
 
-def fun2imag(f):
+def fun2img(f):
     """
     Obtain the pixel matrix of an image from a dolfin function
     """
@@ -126,3 +126,25 @@ def fun2imag(f):
     im_shape=(-1,)+(imsz,)*(gdim-1)
     return C.reshape(im_shape)
     
+def img2fun(im,V):
+    """
+    Convert an image to a dolfin function in given space
+    """
+    f = df.Function(V)
+    mesh = V.mesh()
+    # DG0 cellwise function
+    if f.vector().size() == mesh.num_cells():
+        f.vector().set_local(im.flatten()) # pay attention to the order ('C' or 'F')
+    # Scalar function, interpolated to vertices
+    elif f.value_rank() == 0:
+        if V.ufl_element().degree()==1:
+            v2d = df.vertex_to_dof_map(V)
+            f.vector().set_local(im.flatten()[v2d])
+        elif V.ufl_element().degree()>1:
+            V_deg1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
+            im_f = df.Function(V_deg1)
+            im_f.vector().set_local(im.flatten())
+            f.interpolate(im_f)
+    else:
+        raise AttributeError('Not supported!')
+    return f

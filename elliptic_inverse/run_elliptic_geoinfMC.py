@@ -19,15 +19,15 @@ sys.path.append( "../" )
 from sampler.geoinfMC_dolfin import geoinfMC
 
 np.set_printoptions(precision=3, suppress=True)
-np.random.seed(2017)
+np.random.seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
-    parser.add_argument('num_samp', nargs='?', type=int, default=2000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=500)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.5,2.,1.3,6.,4.]) # SNR10: [.5,2,1.3,6.,4.];SNR100: [.01,.04,0.04,.52,.25]
-    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,4,1,4,1,4])
+    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
+    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.01,.04,.03,.52,.25]) # SNR10: [.5,2,1.3,6.,4.];SNR100: [.01,.04,0.04,.52,.25]
+    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,4,1,4])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
 
@@ -37,7 +37,7 @@ def main():
     # parameters for prior model
     sigma=1.25;s=0.0625
     # parameters for misfit model
-    SNR=10 # 100
+    SNR=100 # 100
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     

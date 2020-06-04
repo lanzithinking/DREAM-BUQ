@@ -9,11 +9,12 @@ Shiwei Lan @ U of Warwick, 2016; @ Caltech, Sept. 2016
 Created July 30, 2016
 ---------------------------------------------------------------
 Modified September 28, 2019 in FEniCS 2019.1.0 (python 3) @ ASU
+Changed Lagrange element degree from 2 to 1 on June 3, 2020
 """
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2016, The EQUIP/EQUiPS projects"
 __license__ = "GPL"
-__version__ = "0.7"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
 __email__ = "S.Lan@warwick.ac.uk; slan@caltech.edu; lanzithinking@outlook.com; slan@asu.edu"
 
@@ -92,15 +93,15 @@ class ellipticPDE:
 
         # 2. Define the finite element spaces and build mixed space
         try:
-            V_fe = df.FiniteElement("CG", self.mesh.ufl_cell(), 2)
-            L_fe = df.FiniteElement("CG", self.mesh.ufl_cell(), 2)
+            V_fe = df.FiniteElement("CG", self.mesh.ufl_cell(), 1)
+            L_fe = df.FiniteElement("CG", self.mesh.ufl_cell(), 1)
             self.V = df.FunctionSpace(self.mesh, V_fe)
             self.W = df.FunctionSpace(self.mesh, V_fe * L_fe)
         except TypeError:
             print('Warning: ''MixedFunctionSpace'' has been deprecated in DOLFIN version 1.7.0.')
             print('It will be removed from version 2.0.0.')
-            self.V = df.FunctionSpace(self.mesh, 'CG', 2)
-            L = df.FunctionSpace(self.mesh, 'CG', 2)
+            self.V = df.FunctionSpace(self.mesh, 'CG', 1)
+            L = df.FunctionSpace(self.mesh, 'CG', 1)
             self.W = self.V * L
         
         # 3. Define boundary conditions
@@ -297,7 +298,7 @@ class ellipticPDE:
         return fig
     
 if __name__ == '__main__':
-    np.random.seed(2017)
+    np.random.seed(2020)
     # define PDE
     pde=ellipticPDE()
     # get the forcing function

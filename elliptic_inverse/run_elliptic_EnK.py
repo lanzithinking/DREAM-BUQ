@@ -26,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=100)
-    parser.add_argument('max_iter', nargs='?', type=int, default=20)
+    parser.add_argument('max_iter', nargs='?', type=int, default=50)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1,.01]) # SNR10: [1,.01];SNR100: [1,.01]
     parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
     args = parser.parse_args()
@@ -37,7 +37,7 @@ def main():
     # parameters for prior model
     sigma=1.25;s=0.0625
     # parameters for misfit model
-    SNR=10 # 100
+    SNR=100 # 100
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     

@@ -269,13 +269,13 @@ class data_misfit(object):
         return fig
     
 if __name__ == '__main__':
-    np.random.seed(2017)
+    np.random.seed(2020)
     # define PDE
     pde=ellipticPDE()
     # get the true parameter function
     truth = _true_coeff(degree=0)
     # define data misfit
-    misfit = data_misfit(pde,SNR=10)
+    misfit = data_misfit(pde,SNR=100)
     # plot
     import matplotlib.pyplot as plt
     import matplotlib as mpl

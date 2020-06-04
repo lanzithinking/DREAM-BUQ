@@ -406,7 +406,7 @@ class Gaussian_prior:
         
 if __name__ == '__main__':
     from pde import *
-    np.random.seed(2017)
+    np.random.seed(2020)
     PDE = ellipticPDE()
     mpi_comm = PDE.mesh.mpi_comm()
     prior = Gaussian_prior(V=PDE.V,mpi_comm=mpi_comm)

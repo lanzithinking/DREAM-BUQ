@@ -489,7 +489,7 @@ class Elliptic:
             print('Time used is %.4f' % (end-start))
 
 if __name__ == '__main__':
-    np.random.seed(2017)
+    np.random.seed(2020)
     SNR=100
     elliptic = Elliptic(nx=40,ny=40,SNR=SNR)
 #     elliptic.test(SAVE=False,PLOT=True,chk_fd=True,h=1e-4)

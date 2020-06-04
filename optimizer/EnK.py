@@ -182,7 +182,7 @@ class EnK(object):
     
 # test
 if __name__=='__main__':
-    np.random.seed(2022)
+    np.random.seed(2020)
     # generate data
     D=4; m=10
     u_truth=np.arange(D)-1

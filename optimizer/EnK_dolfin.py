@@ -286,7 +286,7 @@ if __name__=='__main__':
     # parameters for prior model
     sigma=1.25;s=0.0625
     # parameters for misfit model
-    SNR=10 # 100
+    SNR=100 # 100
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     
