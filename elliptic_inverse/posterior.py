@@ -251,10 +251,10 @@ def Gaussian_apx_posterior(prior,**kwargs):
         df.error('Definition not specified!')
         
 if __name__ == '__main__':
-#     np.random.seed(2017)
+#     np.random.seed(2020)
     from Elliptic import Elliptic
     # define the inverse problem
-    SNR=10
+    SNR=50
     elliptic=Elliptic(nx=40,ny=40,SNR=SNR)
     # get MAP
     unknown=df.Function(elliptic.pde.V)

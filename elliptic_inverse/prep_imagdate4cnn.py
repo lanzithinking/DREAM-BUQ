@@ -51,7 +51,7 @@ if __name__ == '__main__':
     # define the inverse problem
     np.random.seed(2020)
     nx=40; ny=40
-    SNR=100
+    SNR=50
     elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
     # algorithms
     algs=['EKI','EKS']

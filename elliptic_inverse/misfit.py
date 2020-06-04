@@ -275,7 +275,7 @@ if __name__ == '__main__':
     # get the true parameter function
     truth = _true_coeff(degree=0)
     # define data misfit
-    misfit = data_misfit(pde,SNR=100)
+    misfit = data_misfit(pde,SNR=50)
     # plot
     import matplotlib.pyplot as plt
     import matplotlib as mpl
