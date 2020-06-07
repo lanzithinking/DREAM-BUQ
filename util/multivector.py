@@ -239,9 +239,9 @@ def MatMvTranspmult(A, x, y):
     for i in range(x.nvec()):
         A.transpmult(x[i], y[i])
         
-def MvDSmatMult(X, A, Y):
+def MvDSmatMult(X, A, Y, XAPY=False):
     assert X.nvec() == A.shape[0], "X Number of vecs incompatible with number of rows in A"
     assert Y.nvec() == A.shape[1], "Y Number of vecs incompatible with number of cols in A"
     for j in range(Y.nvec()):
-        Y[j].zero()
+        if not XAPY: Y[j].zero()
         X.reduce(Y[j], A[:,j].flatten())

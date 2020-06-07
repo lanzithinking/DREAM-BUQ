@@ -53,7 +53,7 @@ class _ImpLinOp(df.LinearOperator):
         Ox = df.Vector()
         self.init_vector(Ox,0)
         self.mult(x, Ox)
-        return Ox.inner(y)
+        return Ox.inner(self.M*y)
     
     def get_solver(self,**kwargs):
 #         solver=df.PETScLUSolver(self.prior.mpi_comm,self._as_petscmat(),'mumps' if df.has_lu_solver_method('mumps') else 'default')
@@ -113,8 +113,8 @@ class EnK(object):
         '''
         # ensemble states
         self.u=u
-        self.J=self.u.nvec() # number of ensembles (J)
         self.D=self.u[0].size() # state dimension (D)
+        self.J=self.u.nvec() # number of ensembles (J)
         # forward mapping
         self.G=G
         # data and prior
@@ -149,10 +149,10 @@ class EnK(object):
         err=np.sqrt((y_eta-p_m).dot(np.linalg.solve(self.data['cov'],(y_eta-p_m).T)))
         
         # analysis step
-        p_tld=p-p_m
+        p_tld=p-p_m # (J,m)
         C_pp=p_tld.T.dot(p_tld)/(self.J-1) # (m,m)
-        C_up=MultiVector(self.u[0],self.data['size']) # C_up=0_{m x D}
-        MvDSmatMult(self.u,p_tld/(self.J-1),C_up) # (m,D), C_up+=u*p_tld/(J-1)
+        C_up=MultiVector(self.u[0],self.data['size']) # C_up=0_{D x m}
+        MvDSmatMult(self.u,p_tld/(self.J-1),C_up) # (D,m), C_up=u*p_tld/(J-1)
         alpha={'EKI':1./self.h,'EKS':self.h}[self.alg]
         while self.reg and self.alg=='EKI':
             alpha*=2
@@ -163,13 +163,14 @@ class EnK(object):
         d=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J), C_pp is present to stabilize the inverse
         
         if self.alg=='EKI':
-            MvDSmatMult(C_up,d,self.u) # self.u+=C_up*d
+            MvDSmatMult(C_up,d,self.u,True) # self.u+=C_up*d
         elif self.alg=='EKS':
             if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
 #             print(alpha)
             
             u_=MultiVector(self.u) # copy u to u_
-            MvDSmatMult(C_up,d/alpha*self.h,self.u) # u+=C_up*d
+#             MvDSmatMult(C_up,d/alpha*self.h,self.u,True) # u+=C_up*d
+            MvDSmatMult(C_up,d,self.u,True)
             implinop=_ImpLinOp(self.prior,u_,alpha)
             solver=implinop.get_solver()
             u_j=self.prior.gen_vector()
@@ -180,7 +181,7 @@ class EnK(object):
             
             noise=np.sqrt(2*alpha)*np.random.normal(size=(self.J,)*2)
             noise-=np.mean(noise,axis=0)
-            MvDSmatMult(u_,noise,self.u) # u+= u_*noise
+            MvDSmatMult(u_,noise,self.u,True) # u+= u_*noise
         
         return err,p
     
@@ -227,7 +228,10 @@ class EnK(object):
             self.u.reduce(u_f.vector(),np.ones(self.J)/self.J)
             u_est.write(u_f,'iter{0}'.format(n))
 #             p_n=self.G(u_f.vector()); err_n=np.sqrt((self.data['obs']-p_n).dot(np.linalg.solve(self.data['cov'],(self.data['obs']-p_n).T))) # compute post error
-            print('Estimated unknown parameters: '+(min(self.D,10)*"%.4f ") % tuple(u_f.vector()[:min(self.D,10)]) )
+            if self.D<=10:
+                print('Estimated unknown parameters: '+(min(self.D,10)*"%.4f ") % tuple(u_f.vector()[:min(self.D,10)]) )
+            else:
+                print('Estimated unknown parameters: min %.4f, med %.4f, max %.4f ' % (u_f.vector().min(), np.median(u_f.vector()), u_f.vector().max()) )
             print(self.alg+' at iteration %d, with error %.8f.\n' % (n+1,errs[n]) )
 #             print(self.alg+' at iteration %d, with error %.8f.\n' % (n+1,err_n) )
             # terminate if discrepancy principle satisfied
@@ -286,7 +290,7 @@ if __name__=='__main__':
     # parameters for prior model
     sigma=1.25;s=0.0625
     # parameters for misfit model
-    SNR=100 # 100
+    SNR=50 # 100
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     
@@ -306,7 +310,7 @@ if __name__=='__main__':
     data={'obs':y,'size':y.size,'cov':1./elliptic.misfit.prec*np.eye(y.size)}
     
     # parameters
-    stp_sz=[1,.01]
+    stp_sz=[.1,.01]
     nz_lvl=1
     err_thld=1e-1
     algs=['EKI','EKS']

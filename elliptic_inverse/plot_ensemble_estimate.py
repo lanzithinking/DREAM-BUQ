@@ -45,7 +45,7 @@ elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
 # err_thld=1e-1
 algs=['EKI','EKS']
 num_algs=len(algs)
-max_iter=10
+max_iter=50
 
 # #### EKI ####
 # eki=EnK(unknown,G,data,elliptic.prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=algs[0],reg=True)
@@ -65,6 +65,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mp
 from util import matplot4dolfin
 matplot=matplot4dolfin()
+plt.rcParams['image.cmap'] = 'jet'
 
 num_rows=1
 fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((1+num_algs)/num_rows)),sharex=True,sharey=True,figsize=(12,4))

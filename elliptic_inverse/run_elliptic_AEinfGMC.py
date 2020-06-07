@@ -45,7 +45,7 @@ def main():
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     
     # define AutoEncoder
-    loaded=np.load(file='../nn/training.npz')
+    loaded=np.load(file='./result/ae_training.npz')
     X=loaded['X']
     num_samp=X.shape[0]
     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
@@ -70,6 +70,7 @@ def main():
         ae.train(epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
         print('\nTime used for training AutoEncoder: {}'.format(t_used))
+        ae.save('./result/')
     
     # initialization
 #     unknown=elliptic.prior.sample(whiten=False)
