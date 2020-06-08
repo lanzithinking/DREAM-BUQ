@@ -166,7 +166,7 @@ class EnK(object):
             MvDSmatMult(C_up,d,self.u,True) # self.u+=C_up*d
         elif self.alg=='EKS':
             if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
-            print(alpha)
+#             print(alpha)
             
             u_=MultiVector(self.u) # copy u to u_
 #             MvDSmatMult(C_up,d/alpha*self.h,self.u,True) # u+=C_up*d
@@ -295,7 +295,7 @@ if __name__=='__main__':
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     
     # initialization
-    J=10
+    J=100
     unknown=MultiVector(elliptic.prior.gen_vector(),J)
     for j in range(J): unknown[j].set_local(elliptic.prior.sample(whiten=False))
     # define parameters needed
@@ -310,7 +310,7 @@ if __name__=='__main__':
     data={'obs':y,'size':y.size,'cov':1./elliptic.misfit.prec*np.eye(y.size)}
     
     # parameters
-    stp_sz=[.1,.01]
+    stp_sz=[1,.1]
     nz_lvl=1
     err_thld=1e-1
     algs=['EKI','EKS']

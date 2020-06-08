@@ -20,16 +20,16 @@ def retrieve_ensemble(mpi_comm,V,dir_name,f_name,ensbl_sz,max_iter,img_out=False
     if img_out:
         gdim = V.mesh().geometry().dim()
         imsz = np.floor(V.dim()**(1./gdim)).astype('int')
-        out_shape=(num_ensbls,V.dim()/imsz**(gdim-1))+(imsz,)*(gdim-1)
+        out_shape=(num_ensbls,np.int(V.dim()/imsz**(gdim-1)))+(imsz,)*(gdim-1)
     else:
         out_shape=(num_ensbls,V.dim())
     out=np.zeros(out_shape)
     prog=np.ceil(num_ensbls*(.1+np.arange(0,1,.1)))
     for n in range(max_iter):
         for j in range(ensbl_sz):
-            f.read(ensbl_f,'iter{0}_ensbl{1}'.format(n+1,j))
+            f.read(ensbl_f,'iter{0}_ensbl{1}'.format(n+(TRAIN=='AE'),j))
             s=n*ensbl_sz+j
-            out[s]=fun2img(ensbl_f) if img_out else ensbl_f.vector()
+            out[s]=fun2img(ensbl_f) if img_out else ensbl_f.vector().get_local()
             if s+1 in prog:
                 print('{0:.0f}% ensembles have been retrieved.'.format(np.float(s+1)/num_ensbls*100))
     f.close()
@@ -49,8 +49,8 @@ if __name__ == '__main__':
     folder = './analysis_f_SNR'+str(SNR)
     hdf5_files=[f for f in os.listdir(folder) if f.endswith('.h5')]
     pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
-    ensbl_sz=100
-    max_iter=20
+    ensbl_sz=500
+    max_iter=10
     img_out=(TRAIN=='CNN')
     
     PLOT=False
@@ -70,13 +70,14 @@ if __name__ == '__main__':
                     pass
         if found and img_out and PLOT:
             import matplotlib.pyplot as plt
+            plt.rcParams['image.cmap'] = 'jet'
             fig = plt.figure(figsize=(8,8), facecolor='white')
             ax = fig.add_subplot(111, frameon=False)
             plt.ion()
             plt.show(block=False)
             for t in range(out.shape[0]):
                 plt.cla()
-                plt.imshow(imag[t],origin='lower',extent=[0,1,0,1])
+                plt.imshow(out[t],origin='lower',extent=[0,1,0,1])
                 plt.title('Ensemble {}'.format(t))
                 plt.show()
                 plt.pause(1.0/100.0)
@@ -95,11 +96,12 @@ if __name__ == '__main__':
                         found=False
                         pass
         if found and SAVE:
+            savepath='./train_model/'
             if TRAIN=='CNN':
-                np.savez_compressed(file=os.path.join(folder,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out,Y=fwdout)
+                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out,Y=fwdout)
             else:
-                np.savez_compressed(file=os.path.join(folder,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out)
+                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out)
 #             # how to load
-#             loaded=np.load(file=os.path.join(folder,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'++TRAIN+'.npz'))
+#             loaded=np.load(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'++TRAIN+'.npz'))
 #             X=loaded['X']
 #             Y=loaded['Y']

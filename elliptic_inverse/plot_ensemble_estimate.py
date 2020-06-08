@@ -45,7 +45,7 @@ elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
 # err_thld=1e-1
 algs=['EKI','EKS']
 num_algs=len(algs)
-max_iter=50
+max_iter=10
 
 # #### EKI ####
 # eki=EnK(unknown,G,data,elliptic.prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=algs[0],reg=True)
