@@ -166,7 +166,7 @@ class EnK(object):
             MvDSmatMult(C_up,d,self.u,True) # self.u+=C_up*d
         elif self.alg=='EKS':
             if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
-#             print(alpha)
+            print(alpha)
             
             u_=MultiVector(self.u) # copy u to u_
 #             MvDSmatMult(C_up,d/alpha*self.h,self.u,True) # u+=C_up*d
@@ -179,7 +179,7 @@ class EnK(object):
                 solver.solve(u_j,self.u[j])
                 self.u[j].set_local(u_j)
             
-            noise=np.sqrt(2*alpha)*np.random.normal(size=(self.J,)*2)
+            noise=np.sqrt(2*alpha/(self.J-1))*np.random.normal(size=(self.J,)*2)
             noise-=np.mean(noise,axis=0)
             MvDSmatMult(u_,noise,self.u,True) # u+= u_*noise
         
