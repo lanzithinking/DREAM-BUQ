@@ -1,5 +1,5 @@
 """
-This is to test CNN in emulating (extracted) gradients compared with those exactly calculated.
+This is to train CNN to emulate (extracted) gradients compared with those exactly calculated.
 """
 
 import numpy as np
@@ -47,10 +47,10 @@ activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
 latent_dim=128
 droprate=.25
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-cnn=CNN(x_train, y_train, num_filters=num_filters, x_test=x_test, y_test=y_test, 
+cnn=CNN(x_train, y_train, x_test=x_test, y_test=y_test, num_filters=num_filters,
         latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
 try:
-    cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+'.h5'))
+    cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
     print('cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'+' has been loaded!')
 except Exception as err:
     print(err)
@@ -64,9 +64,6 @@ except Exception as err:
     # save CNN
 #     cnn.model.save('./result/cnn_model.h5')
     cnn.save(folder,'cnn_'+algs[alg_no]+str(ensbl_sz))
-    # how to laod model
-#     from tensorflow.keras.models import load_model
-#     reconstructed_model=load_model('XX_model.h5')
 
 # some more test
 loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)

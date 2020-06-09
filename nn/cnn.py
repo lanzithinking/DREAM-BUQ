@@ -7,14 +7,14 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 
 class CNN:
-    def __init__(self, x_train, y_train, num_filters=[16,32], kernel_size=(3,3), pool_size=(2,2), strides=(1,1), x_test=None, y_test=None, **kwargs):
+    def __init__(self, x_train, y_train, x_test=None, y_test=None, num_filters=[16,32], kernel_size=(3,3), pool_size=(2,2), strides=(1,1), **kwargs):
         self.x_train, self.y_train = x_train, y_train
-        self.num_samps=self.x_train.shape[0]
+        self.num_samp=self.x_train.shape[0]
         self.input_shape=self.x_train.shape[1:]
         self.output_dim=self.y_train.shape[1]
         self.x_test, self.y_test = x_test, y_test
         if any([i is None for i in (self.x_test, self.y_test)]):
-            tr_idx=np.random.choice(self.num_samps,size=np.floor(.75*self.num_samp).astype('int'),replace=False)
+            tr_idx=np.random.choice(self.num_samp,size=np.floor(.75*self.num_samp).astype('int'),replace=False)
             te_idx=np.setdiff1d(np.arange(self.num_samp),tr_idx)
             self.x_test, self.y_test = self.x_train[te_idx], self.y_train[te_idx]
             self.x_train, self.y_train = self.x_train[tr_idx], self.y_train[tr_idx]
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     latent_dim=128
     droprate=.25
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train, y_train, num_filters=num_filters, x_test=x_test, y_test=y_test, 
+    cnn=CNN(x_train, y_train, x_test=x_test, y_test=y_test, num_filters=num_filters,
             latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
     try:
         cnn.model=load_model('./result/cnn_'+algs[alg_no]+'.h5')

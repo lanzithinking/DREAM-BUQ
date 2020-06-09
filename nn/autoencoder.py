@@ -8,15 +8,21 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 
 class AutoEncoder:
-    def __init__(self, x_train, x_test, latent_dim, half_depth, **kwargs):
+    def __init__(self, x_train, x_test=None, half_depth=3, latent_dim=None, **kwargs):
         self.x_train = x_train
+        self.num_samp, self.dim = self.x_train.shape
         self.x_test = x_test
-        self.dim = x_train.shape[1]
-        self.latent_dim = latent_dim
+        if self.x_test is None:
+            tr_idx=np.random.choice(self.num_samp,size=np.floor(.75*self.num_samp).astype('int'),replace=False)
+            te_idx=np.setdiff1d(np.arange(self.num_samp),tr_idx)
+            self.x_test = self.x_train[te_idx]
+            self.x_train = self.x_train[tr_idx]
         self.half_depth = half_depth
+        self.latent_dim = latent_dim
+        if self.latent_dim is None: self.latent_dim = np.ceil(self.dim/self.half_depth).astype('int')
         self.activation = kwargs.pop('activation','linear')
         self.node_sizes = kwargs.pop('node_sizes',None)
-        if not self.node_sizes or np.size(self.node_sizes)!=2*self.half_depth+1:
+        if self.node_sizes is None or np.size(self.node_sizes)!=2*self.half_depth+1:
             self.node_sizes = np.linspace(self.dim,self.latent_dim,self.half_depth+1,dtype=np.int)
             self.node_sizes = np.concatenate((self.node_sizes,self.node_sizes[-2::-1]))
         if not np.all([self.node_sizes[i]==self.dim for i in (0,-1)]):
@@ -29,9 +35,7 @@ class AutoEncoder:
         output = input
         for i in range(self.half_depth):
             layer_name = "{}_out".format(coding) if i==self.half_depth-1 else "{}_layer{}".format(coding,i)
-            output = Dense(units=node_sizes[i+1],
-                           activation=self.activation,
-                           name=layer_name)(output)
+            output = Dense(units=node_sizes[i+1], activation=self.activation, name=layer_name)(output)
         return output
 
     def build(self,**kwargs):
@@ -51,9 +55,10 @@ class AutoEncoder:
         self.decoder = K.function(encoded_out, decoded_out)
         
         # compile model
-        optimizer = kwargs('optimizer','adam')
+        optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
-        self.model.compile(optimizer=optimizer, loss=loss)
+        metrics = kwargs.pop('metrics',['mae'])
+        self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
     def train(self, epochs, batch_size=32, verbose=0, dump_data=False):
         es = EarlyStopping(monitor='loss', mode='auto', verbose=1)
@@ -110,8 +115,8 @@ if __name__ == '__main__':
     x_train,x_test=X[tr_idx],X[te_idx]
     
     # define Auto-Encoder
-    latent_dim=441; half_depth=3
-    ae=AutoEncoder(x_train, x_test,latent_dim, half_depth)
+    half_depth=3; latent_dim=441
+    ae=AutoEncoder(x_train, x_test, half_depth, latent_dim)
     epochs=200
     import timeit
     t_start=timeit.default_timer()
