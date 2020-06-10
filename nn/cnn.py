@@ -91,8 +91,8 @@ class CNN:
         return np.squeeze(grad)
     
     def jacobian(self, input):
+        x = tf.constant(input)
         with tf.GradientTape() as g:
-            x = tf.constant(input)
             g.watch(x)
             y = self.model(x)
         jac = g.jacobian(y,x).numpy()

@@ -43,17 +43,16 @@ x_test=X[n_tr:]
 half_depth=3; latent_dim=441
 activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.01)
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-ae=AutoEncoder(x_train, x_test=None, half_depth=half_depth, latent_dim=latent_dim,
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+ae=AutoEncoder(x_train, x_test=x_test, half_depth=half_depth, latent_dim=latent_dim,
                activation=activation, optimizer=optimizer)
 try:
     ae.model=load_model(os.path.join(folder,'ae_fullmodel_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
     print('ae_fullmodel'+algs[alg_no]+str(ensbl_sz)+'.h5'+' has been loaded!')
     ae.encoder=load_model(os.path.join(folder,'ae_encoder_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
     print('ae_encoder'+algs[alg_no]+str(ensbl_sz)+'.h5'+' has been loaded!')
-    from tensorflow.keras import backend as K
-    ae.decoder=K.function(inputs=ae.model.get_layer(name="encode_out").output,outputs=ae.model.output)
-    print('ae_decoder'+algs[alg_no]+str(ensbl_sz)+' has been configured!')
+    ae.decoder=load_model(os.path.join(folder,'ae_decoder_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
+    print('ae_decoder'+algs[alg_no]+str(ensbl_sz)+'.h5'+' has been loaded!')
 except Exception as err:
     print(err)
     print('Train AutoEncoder...\n')
@@ -66,6 +65,7 @@ except Exception as err:
     # save AE
     ae.model.save(os.path.join(folder,'ae_fullmodel_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
     ae.encoder.save(os.path.join(folder,'ae_encoder_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
+    ae.decoder.save(os.path.join(folder,'ae_decoder_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
 
 # some more test
 # loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
@@ -80,6 +80,12 @@ for n in range(20):
     u_encoded=ae.encode(u.get_local()[None,:])
     # decode
     u_decoded=ae.decode(u_encoded)
+    
+    # compute the log-volumes
+    logvol_enc=ae.logvol(u.get_local()[None,:],'encode')
+    print('Log-volume of encoder: {}'.format(logvol_enc))
+    logvol_dec=ae.logvol(u_encoded,'decode')
+    print('Log-volume of decoder: {}'.format(logvol_dec))
     
     # plot
     plt.subplot(121)

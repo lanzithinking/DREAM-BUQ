@@ -3,7 +3,6 @@ import tensorflow as tf
 from tensorflow.keras.layers import Input,Dense
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
-from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import EarlyStopping
 
 
@@ -35,24 +34,28 @@ class AutoEncoder:
         output = input
         for i in range(self.half_depth):
             layer_name = "{}_out".format(coding) if i==self.half_depth-1 else "{}_layer{}".format(coding,i)
-            output = Dense(units=node_sizes[i+1], activation=self.activation, name=layer_name)(output)
+            if callable(self.activation):
+                output = Dense(units=node_sizes[i+1], name=layer_name)(output)
+                output = self.activation(output)
+            else:
+                output = Dense(units=node_sizes[i+1], activation=self.activation, name=layer_name)(output)
         return output
 
     def build(self,**kwargs):
         # this is our input placeholder
         input = Input(shape=(self.dim,), name='encoder_input')
+        latent_input = Input(shape=(self.latent_dim,), name='decoder_input')
         
         encoded_out = self._set_layers(input, 'encode')
-        decoded_out = self._set_layers(encoded_out, 'decode')
+        decoded_out = self._set_layers(latent_input, 'decode')
 
-        # this model maps an input to its reconstruction
-        self.model = Model(input, decoded_out)
+        # encoder
+        self.encoder = Model(input, encoded_out, name='encoder')
+        # decoder
+        self.decoder = Model(latent_input, decoded_out, name='decoder')
 
-        #Get intermediate layer
-        self.latent_model = Model(inputs=self.model.input,
-                                  outputs=self.model.get_layer(name="encode_out").output)
-        self.encoder = self.latent_model
-        self.decoder = K.function(encoded_out, decoded_out)
+        # full auto-encoder model
+        self.model = Model(inputs=input, outputs=self.decoder(self.encoder(input)), name='autoencoder')
         
         # compile model
         optimizer = kwargs.pop('optimizer','adam')
@@ -78,6 +81,7 @@ class AutoEncoder:
         import os
         self.model.save(os.path.join(savepath,'ae_fullmodel.h5'))
         self.encoder.save(os.path.join(savepath,'ae_encoder.h5'))
+        self.decoder.save(os.path.join(savepath,'ae_decoder.h5'))
     
     def encode(self, input):
         assert input.shape[1]==self.dim, 'Wrong input dimension for encoder!'
@@ -85,15 +89,17 @@ class AutoEncoder:
     
     def decode(self, input):
         assert input.shape[1]==self.latent_dim, 'Wrong input dimension for decoder!'
-        return self.decoder(input)
+        return self.decoder.predict(input)
     
     def jacobian(self, input, coding='encode'):
         model = getattr(self,coding+'r')
-        with tf.GradientTape() as g:
-            x = tf.constant(input)
+        x = tf.Variable(input, trainable=True, dtype=tf.float32)
+#         x = tf.constant(input, dtype=tf.float32)
+        with tf.GradientTape(persistent=True) as g:
             g.watch(x)
             y = model(x)
         jac = g.jacobian(y,x).numpy()
+#         jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
     
     def logvol(self, input, coding='encode'):
@@ -127,8 +133,7 @@ if __name__ == '__main__':
     # save Auto-Encoder
     ae.model.save('./result/ae_fullmodel.h5')
     ae.encoder.save('./result/ae_encoder.h5')
-#     ae.decoder.save('./result/ae_decoder.h5') # cannot save, but can be reconstructed by: 
-#     decoder=K.function(inputs=ae_fullmodel.get_layer(name="encode_out").output,outputs=ae_fullmodel.output)
+    ae.decoder.save('./result/ae_decoder.h5') # cannot save, but can be reconstructed by: 
     # how to laod model
 #     from tensorflow.keras.models import load_model
 #     reconstructed_model=load_model('XX_model.h5')
