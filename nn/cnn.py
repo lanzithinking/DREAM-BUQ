@@ -1,3 +1,19 @@
+#!/usr/bin/env python
+"""
+Convolutional Neural Network
+Shiwei Lan @ASU, 2020
+--------------------------------------
+Standard AutoEncoder in TensorFlow 2.2
+--------------------
+Created June 4, 2020
+"""
+__author__ = "Shiwei Lan"
+__copyright__ = "Copyright 2020"
+__license__ = "GPL"
+__version__ = "0.3"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@gmail.com"
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense
@@ -7,17 +23,23 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 
 class CNN:
-    def __init__(self, x_train, y_train, x_test=None, y_test=None, num_filters=[16,32], kernel_size=(3,3), pool_size=(2,2), strides=(1,1), **kwargs):
-        self.x_train, self.y_train = x_train, y_train
-        self.num_samp=self.x_train.shape[0]
-        self.input_shape=self.x_train.shape[1:]
-        self.output_dim=self.y_train.shape[1]
-        self.x_test, self.y_test = x_test, y_test
-        if any([i is None for i in (self.x_test, self.y_test)]):
-            tr_idx=np.random.choice(self.num_samp,size=np.floor(.75*self.num_samp).astype('int'),replace=False)
-            te_idx=np.setdiff1d(np.arange(self.num_samp),tr_idx)
-            self.x_test, self.y_test = self.x_train[te_idx], self.y_train[te_idx]
-            self.x_train, self.y_train = self.x_train[tr_idx], self.y_train[tr_idx]
+    def __init__(self, input_shape, output_dim, num_filters=[16,32], kernel_size=(3,3), pool_size=(2,2), strides=(1,1), **kwargs):
+        """
+        Convolutional Neural Network
+        --------------------------------------------------------------------------------
+        input_shape: input shape (im_sz, chnl)
+        output_dim: the dimension of the output space
+        num_filters: list of filter sizes of Conv2D
+        kernel_size: kernel size of Conv2D
+        pool_size: pool size of MaxPooling2D
+        strides: strides of Conv2D/MaxPooling2D
+        activations: specification of activation functions, can be a list of strings or Keras activation layers
+        latent_dim: the dimension of the latent space
+        padding: padding of Conv2D/MaxPooling2D
+        droprate: the rate of Dropout
+        """
+        self.input_shape=input_shape
+        self.output_dim=output_dim
         self.num_filters = num_filters
         self.conv_depth = len(self.num_filters)
         self.kernel_size = kernel_size
@@ -31,6 +53,9 @@ class CNN:
         self.build(**kwargs)
         
     def _set_layers(self, model):
+        """
+        Set network layers
+        """
         for i in range(self.conv_depth):
             model.add(Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
                              activation=self.activations['conv'], name='conv_layer{}'.format(i)))
@@ -47,6 +72,9 @@ class CNN:
         return model
 
     def build(self,**kwargs):
+        """
+        Set up the network structure and compile the model with optimizer, loss and metrics.
+        """
         # initialize model
         input = Input(shape=self.input_shape, name='image_input')
         model = Sequential([input])
@@ -59,28 +87,43 @@ class CNN:
         metrics = kwargs.pop('metrics',['mae'])
         self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    def train(self, epochs, batch_size=32, verbose=0, dump_data=False):
+    def train(self, x_train, y_train, x_test=None, y_test=None, epochs=100, batch_size=32, verbose=0):
+        """
+        Train the model with data
+        """
+        num_samp=x_train.shape[0]
+        if any([i is None for i in (x_test, y_test)]):
+            tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+            te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+            x_test, y_test = x_train[te_idx], y_train[te_idx]
+            x_train, y_train = x_train[tr_idx], y_train[tr_idx]
         es = EarlyStopping(monitor='loss', mode='auto', verbose=1)
-        self.history = self.model.fit(self.x_train, self.y_train,
-                                      validation_data=(self.x_test, self.y_test),
+        self.history = self.model.fit(x_train, y_train,
+                                      validation_data=(x_test, y_test),
                                       epochs=epochs,
                                       batch_size=batch_size,
                                       shuffle=True,
                                       callbacks=[es],
                                       verbose=verbose)
-        if dump_data:
-            self.x_train,self.y_train=([],)*2
-            self.x_test,self.y_test=([],)*2
         
     def save(self, savepath='./',filename='cnn_model'):
+        """
+        Save the trained model for future use
+        """
         import os
         self.model.save(os.path.join(savepath,filename+'.h5'))
     
     def evaluate(self, input):
+        """
+        Output model prediction
+        """
         assert input.shape[1:]==self.input_shape, 'Wrong image shape!'
         return self.model.predict(input)
     
     def gradient(self, input, objf=None):
+        """
+        Obtain gradient of objective function wrt input
+        """
         if not objf:
             objf = lambda x: tf.keras.losses.MeanSquaredError(self.y_train,self.model(x))
         x = tf.Variable(input, trainable=True)
@@ -91,6 +134,9 @@ class CNN:
         return np.squeeze(grad)
     
     def jacobian(self, input):
+        """
+        Obtain Jacobian matrix of output wrt input
+        """
         x = tf.constant(input)
         with tf.GradientTape() as g:
             g.watch(x)
@@ -138,7 +184,7 @@ if __name__ == '__main__':
     latent_dim=128
     droprate=.25
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train, y_train, x_test=x_test, y_test=y_test, num_filters=num_filters,
+    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,
             latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
     try:
         cnn.model=load_model('./result/cnn_'+algs[alg_no]+'.h5')
@@ -149,7 +195,7 @@ if __name__ == '__main__':
         epochs=100
         import timeit
         t_start=timeit.default_timer()
-        cnn.train(epochs,batch_size=64,verbose=1)
+        cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
         print('\nTime used for training CNN: {}'.format(t_used))
         # save CNN

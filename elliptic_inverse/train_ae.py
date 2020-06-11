@@ -19,6 +19,9 @@ np.random.seed(2020)
 nx=40; ny=40
 SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
+# define the latent (coarser) inverse problem
+nx=20; ny=20
+elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # algorithms
 algs=['EKI','EKS']
 num_algs=len(algs)
@@ -40,11 +43,11 @@ x_train=X[:n_tr]
 x_test=X[n_tr:]
 
 # define AE
-half_depth=3; latent_dim=441
+half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
 activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.01)
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-ae=AutoEncoder(x_train, x_test=x_test, half_depth=half_depth, latent_dim=latent_dim,
+ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                activation=activation, optimizer=optimizer)
 try:
     ae.model=load_model(os.path.join(folder,'ae_fullmodel_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
@@ -59,7 +62,7 @@ except Exception as err:
     epochs=200
     import timeit
     t_start=timeit.default_timer()
-    ae.train(epochs,batch_size=64,verbose=1)
+    ae.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1)
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AE: {}'.format(t_used))
     # save AE
@@ -70,10 +73,11 @@ except Exception as err:
 # some more test
 # loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
 import matplotlib.pyplot as plt
-fig = plt.figure(figsize=(12,6), facecolor='white')
+fig = plt.figure(figsize=(15,5), facecolor='white')
 plt.ion()
 # plt.show(block=True)
 u_f = df.Function(elliptic.pde.V)
+u_f_lat = df.Function(elliptic_latent.pde.V)
 for n in range(20):
     u=elliptic.prior.sample()
     # encode
@@ -88,11 +92,15 @@ for n in range(20):
     print('Log-volume of decoder: {}'.format(logvol_dec))
     
     # plot
-    plt.subplot(121)
+    plt.subplot(131)
     u_f.vector().set_local(u)
     df.plot(u_f)
     plt.title('Original Sample')
-    plt.subplot(122)
+    plt.subplot(132)
+    u_f_lat.vector().set_local(u_encoded.flatten())
+    df.plot(u_f_lat)
+    plt.title('Latent Sample')
+    plt.subplot(133)
     u_f.vector().set_local(u_decoded.flatten())
     df.plot(u_f)
     plt.title('Reconstructed Sample')

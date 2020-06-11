@@ -56,8 +56,8 @@ def main():
     X=loaded['X']
     Y=loaded['Y']
     # pre-processing: scale X to 0-1
-    X-=np.nanmin(X,axis=(1,2),keepdims=True) # try axis=(1,2,3)
-    X/=np.nanmax(X,axis=(1,2),keepdims=True)
+#     X-=np.nanmin(X,axis=(1,2),keepdims=True) # try axis=(1,2,3)
+#     X/=np.nanmax(X,axis=(1,2),keepdims=True)
     X=X[:,:,:,None]
     # split train/test
     num_samp=X.shape[0]
@@ -71,7 +71,7 @@ def main():
     latent_dim=128
     droprate=.25
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train, y_train, num_filters=num_filters, x_test=x_test, y_test=y_test, 
+    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,
             latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
     try:
         cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+'.h5'))
@@ -82,7 +82,7 @@ def main():
         epochs=100
         import timeit
         t_start=timeit.default_timer()
-        cnn.train(epochs,batch_size=64,verbose=1)
+        cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
         print('\nTime used for training CNN: {}'.format(t_used))
         # save CNN

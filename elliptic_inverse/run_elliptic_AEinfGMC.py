@@ -64,7 +64,7 @@ def main():
 #     activation=tf.keras.layers.LeakyReLU(alpha=0.01)
     loss='mse'; metrics='mae'
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-    ae=AutoEncoder(x_train, x_test, half_depth, latent_dim, activation=activation, optimizer=optimizer)
+    ae=AutoEncoder(x_train.shape[1], half_depth, latent_dim, activation=activation, optimizer=optimizer)
     try:
         ae.model=load_model(os.path.join(folder,'ae_fullmodel_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
         print('ae_fullmodel'+algs[alg_no]+str(ensbl_sz)+'.h5'+' has been loaded!')
@@ -78,7 +78,7 @@ def main():
         epochs=200
         import timeit
         t_start=timeit.default_timer()
-        ae.train(epochs,batch_size=64,verbose=1)
+        ae.train(x_train,x_test,epochs=epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
         print('\nTime used for training AE: {}'.format(t_used))
         # save AE

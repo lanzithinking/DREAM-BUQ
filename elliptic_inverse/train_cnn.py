@@ -47,7 +47,7 @@ activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
 latent_dim=128
 droprate=.25
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-cnn=CNN(x_train, y_train, x_test=x_test, y_test=y_test, num_filters=num_filters,
+cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,
         latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
 try:
     cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
@@ -58,7 +58,7 @@ except Exception as err:
     epochs=100
     import timeit
     t_start=timeit.default_timer()
-    cnn.train(epochs,batch_size=64,verbose=1)
+    cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training CNN: {}'.format(t_used))
     # save CNN
