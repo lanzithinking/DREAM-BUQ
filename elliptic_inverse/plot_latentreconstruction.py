@@ -1,5 +1,5 @@
 """
-This is to train AutoEncoder for dimension reduction.
+This is to plot latent and reconstructed samples.
 """
 
 import numpy as np
@@ -56,8 +56,8 @@ ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                activation=activation, optimizer=optimizer)
 # ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 #                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
+f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
 # folder=folder+'/saved_model'
-f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'_customloss.h5' for i in ('fullmodel','encoder','decoder')]
 try:
     ae.model=load_model(os.path.join(folder,f_name[0]),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')
@@ -79,40 +79,56 @@ except Exception as err:
     ae.encoder.save(os.path.join(folder,f_name[1]))
     ae.decoder.save(os.path.join(folder,f_name[2]))
 
-# some more test
-# loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
-import matplotlib.pyplot as plt
-fig = plt.figure(figsize=(15,5), facecolor='white')
-plt.ion()
-# plt.show(block=True)
+# read data and construct plot functions
 u_f = df.Function(elliptic.pde.V)
 u_f_lat = df.Function(elliptic_latent.pde.V)
-for n in range(20):
-    u=elliptic.prior.sample()
-    # encode
-    u_encoded=ae.encode(u.get_local()[None,:])
-    # decode
-    u_decoded=ae.decode(u_encoded)
-    
-    # compute the log-volumes
-    logvol_enc=ae.logvol(u.get_local()[None,:],'encode')
-    print('Log-volume of encoder: {}'.format(logvol_enc))
-    logvol_dec=ae.logvol(u_encoded,'decode')
-    print('Log-volume of decoder: {}'.format(logvol_dec))
-    
-    # plot
-    plt.subplot(131)
-    u_f.vector().set_local(u)
-    df.plot(u_f)
-    plt.title('Original Sample')
-    plt.subplot(132)
-    u_f_lat.vector().set_local(u_encoded.flatten())
-    df.plot(u_f_lat)
-    plt.title('Latent Sample')
-    plt.subplot(133)
-    u_f.vector().set_local(u_decoded.flatten())
-    df.plot(u_f)
-    plt.title('Reconstructed Sample')
-    plt.draw()
-    plt.pause(1.0/10.0)
-    
+# read MAP
+try:
+    f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
+    f.read(u_f,"parameter")
+    f.close()
+except:
+    pass
+u=u_f.vector()
+# encode
+u_encoded=ae.encode(u.get_local()[None,:])
+# decode
+u_decoded=ae.decode(u_encoded)
+
+# plot
+import matplotlib.pyplot as plt
+import matplotlib as mp
+plt.rcParams['image.cmap'] = 'jet'
+fig,axes = plt.subplots(nrows=1,ncols=3,sharex=True,sharey=True,figsize=(15,5))
+sub_figs=[None]*3
+# plot
+plt.axes(axes.flat[0])
+# u_f.vector().set_local(u)
+sub_figs[0]=df.plot(u_f)
+plt.title('Original')
+plt.axes(axes.flat[1])
+u_f_lat.vector().set_local(u_encoded.flatten())
+sub_figs[1]=df.plot(u_f_lat)
+plt.title('Latent')
+plt.axes(axes.flat[2])
+u_f.vector().set_local(u_decoded.flatten())
+sub_figs[2]=df.plot(u_f)
+plt.title('Reconstructed')
+
+# add common colorbar
+from util.common_colorbar import common_colorbar
+fig=common_colorbar(fig,axes,sub_figs)
+# 
+# # adjust common climit
+# clims=np.array([sub_figs[i].get_clim() for i in range(3)])
+# common_clim=np.min(clims[:,0]),np.max(clims[:,1])
+# print(common_clim)
+# [sub_fig.set_clim(common_clim) for sub_fig in sub_figs]
+# # set color bar
+# cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
+# cbar=plt.colorbar(sub_figs[-1], cax=cax,cmap='jet', **kw)
+
+# save plots
+# fig.tight_layout(h_pad=1)
+plt.savefig(os.path.join(folder,'latent_reconstructed.png'),bbox_inches='tight')
+# plt.show()

@@ -17,8 +17,9 @@ def common_colorbar(fig,axes,sub_figs):
         plt.axes(ax)
         if sub_fig:
             sub_fig.set_clim(common_clim)
-    cax,kw = mpl.colorbar.make_axes([ax for ax in axes.flat])
+#     cax,kw = mpl.colorbar.make_axes([ax for ax in axes.flat])
 #     common_colbar=plt.colorbar(sub_fig, cax=cax,**kw)
+    cax = fig.add_axes([ax.get_position().x1+0.02,ax.get_position().y0,0.02,axes.flat[0].get_position().y1-ax.get_position().y0])
     norm = mpl.colors.Normalize(vmin=common_clim[0], vmax=common_clim[1])
     common_colbar = mpl.colorbar.ColorbarBase(cax,norm=norm)
     return fig

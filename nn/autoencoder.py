@@ -10,7 +10,7 @@ Created June 4, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -47,7 +47,7 @@ class AutoEncoder:
             raise ValueError('End node sizes not matching input/output dimensions!')
         # build neural network
         self.build(**kwargs)
-        
+    
     def _set_layers(self, input, coding='encode'):
         """
         Set network layers of encoder (coding 'encode') or decoder (coding 'decode') based on given node_sizes
@@ -62,7 +62,17 @@ class AutoEncoder:
             else:
                 output = Dense(units=node_sizes[i+1], activation=self.activation, name=layer_name)(output)
         return output
-
+    
+    def _custom_loss(self,loss_f):
+        """
+        Wrapper to customize loss function (on latent space)
+        """
+        def loss(y_true, y_pred):
+            L=.5*tf.keras.losses.MSE(y_true, y_pred) # mse: prior
+            L+=loss_f(self.encoder(y_true),y_pred) # potential on latent space: likelihood
+            return L
+        return loss
+        
     def build(self,**kwargs):
         """
         Set up the network structure and compile the model with optimizer, loss and metrics.
@@ -86,9 +96,9 @@ class AutoEncoder:
         optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
         metrics = kwargs.pop('metrics',['mae'])
-        self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-
-    def train(self, x_train, x_test=None, epochs=100, batch_size=32, verbose=0):
+        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else loss, metrics=metrics, **kwargs)
+    
+    def train(self, x_train, x_test=None, epochs=100, batch_size=32, verbose=0, **kwargs):
         """
         Train the model with data
         """
@@ -98,14 +108,15 @@ class AutoEncoder:
             te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
             x_test = x_train[te_idx]
             x_train = x_train[tr_idx]
-        es = EarlyStopping(monitor='loss', mode='auto', verbose=1)
+        patience = kwargs.pop('patience',0)
+        es = EarlyStopping(monitor='loss', mode='auto', verbose=1, patience=patience)
         self.history = self.model.fit(x_train, x_train,
                                       validation_data=(x_test, x_test),
                                       epochs=epochs,
                                       batch_size=batch_size,
                                       shuffle=True,
                                       callbacks=[es],
-                                      verbose=verbose)
+                                      verbose=verbose,**kwargs)
     
     def save(self, savepath='./'):
         """
@@ -135,8 +146,8 @@ class AutoEncoder:
         Obtain Jacobian matrix of encoder (coding encode) or decoder (coding decode)
         """
         model = getattr(self,coding+'r')
-        x = tf.Variable(input, trainable=True, dtype=tf.float32)
 #         x = tf.constant(input, dtype=tf.float32)
+        x = tf.Variable(input, trainable=True, dtype=tf.float32)
         with tf.GradientTape(persistent=True) as g:
             g.watch(x)
             y = model(x)

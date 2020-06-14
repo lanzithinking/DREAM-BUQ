@@ -1,5 +1,5 @@
 """
-This is to train CNN to emulate (extracted) gradients compared with those exactly calculated.
+This is to plot emulated (extracted) gradients compared with those exactly calculated.
 """
 
 import numpy as np
@@ -75,48 +75,45 @@ except Exception as err:
     cnn.model.save(os.path.join(folder,f_name))
 #     cnn.save(folder,'cnn_'+algs[alg_no]+str(ensbl_sz))
 
-# some more test
-logLik = lambda x: loglik(cnn.model(x))
-import timeit
-t_used = np.zeros(2)
-import matplotlib.pyplot as plt
-fig = plt.figure(figsize=(12,6), facecolor='white')
-plt.ion()
-# plt.show(block=True)
+
+# read data and construct plot functions
 u_f = df.Function(elliptic.pde.V)
-for n in range(20):
-    u=elliptic.prior.sample()
-    # calculate gradient
-    t_start=timeit.default_timer()
-    dll_xact = elliptic.get_geom(u,[0,1])[1]
-    t_used[0] += timeit.default_timer()-t_start
-    # emulate gradient
-    t_start=timeit.default_timer()
-    u_img=fun2img(vec2fun(u,elliptic.pde.V))
-    dll_emul = cnn.gradient(u_img[None,:,:,None], logLik)
-    t_used[1] += timeit.default_timer()-t_start
-    # test difference
-    dif = dll_xact - img2fun(dll_emul,elliptic.pde.V).vector()
-    print('Difference between the calculated and emulated gradients: min ({}), med ({}), max ({})'.format(dif.min(),np.median(dif.get_local()),dif.max()))
-    
-    # check the gradient extracted from emulation
-    v=elliptic.prior.sample()
-    v_img=fun2img(vec2fun(v,elliptic.pde.V))
-    h=1e-4
-    dll_emul_fd_v=(logLik(u_img[None,:,:,None]+h*v_img[None,:,:,None])-logLik(u_img[None,:,:,None]))/h
-    reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v_img.flatten()))/v.norm('l2')
-    print('Relative difference between finite difference and extracted results: {}'.format(reldif))
-    
-    # plot
-    plt.subplot(121)
-    u_f.vector().set_local(dll_xact)
-    df.plot(u_f)
-    plt.title('Calculated Gradient')
-    plt.subplot(122)
-    u_f=img2fun(dll_emul,elliptic.pde.V)
-    df.plot(u_f)
-    plt.title('Emulated Gradient')
-    plt.draw()
-    plt.pause(1.0/10.0)
-    
-print('Time used to calculate vs emulate gradients: {} vs {}'.format(*t_used.tolist()))
+# read MAP
+try:
+    f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
+    f.read(u_f,"parameter")
+    f.close()
+except:
+    pass
+u=u_f.vector()
+# u=elliptic.prior.sample()
+logLik = lambda x: loglik(cnn.model(x))
+# calculate gradient
+dll_xact = elliptic.get_geom(u,[0,1])[1]
+# emulate gradient
+u_img=fun2img(vec2fun(u,elliptic.pde.V))
+dll_emul = cnn.gradient(u_img[None,:,:,None], logLik)
+
+# plot
+import matplotlib.pyplot as plt
+import matplotlib as mp
+plt.rcParams['image.cmap'] = 'jet'
+fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=True,figsize=(12,6))
+sub_figs=[None]*2
+# plot
+plt.axes(axes.flat[0])
+u_f.vector().set_local(dll_xact)
+sub_figs[0]=df.plot(u_f)
+plt.title('Calculated Gradient')
+plt.axes(axes.flat[1])
+u_f=img2fun(dll_emul,elliptic.pde.V)
+sub_figs[1]=df.plot(u_f)
+plt.title('Emulated Gradient')
+# add common colorbar
+from util.common_colorbar import common_colorbar
+fig=common_colorbar(fig,axes,sub_figs)
+
+# save plots
+# fig.tight_layout(h_pad=1)
+plt.savefig(os.path.join(folder,'extrctgrad.png'),bbox_inches='tight')
+# plt.show()

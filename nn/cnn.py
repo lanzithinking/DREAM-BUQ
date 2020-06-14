@@ -7,10 +7,10 @@ Standard AutoEncoder in TensorFlow 2.2
 --------------------
 Created June 4, 2020
 """
-__author__ = "Shiwei Lan"
+__author__ = "Shiwei Lan; Shuyi Li"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -18,6 +18,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense
 from tensorflow.keras.models import Sequential
+# from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
 
@@ -51,7 +52,7 @@ class CNN:
         self.droprate = kwargs.pop('droprate',0)
         # build neural network
         self.build(**kwargs)
-        
+    
     def _set_layers(self, model):
         """
         Set network layers
@@ -70,7 +71,38 @@ class CNN:
             model.add(Dropout(rate=self.droprate))
         model.add(Dense(units=self.output_dim,activation=self.activations['output'],name='output'))
         return model
-
+    
+#     def _set_layers(self, input):
+#         """
+#         Set network layers
+#         """
+#         output=input
+#         for i in range(self.conv_depth):
+#             output=Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
+#                           activation=self.activations['conv'], name='conv_layer{}'.format(i))(output)
+#             output=MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i))(output)
+#         output=Flatten()(output)
+#         if callable(self.activations['latent']):
+#             output=Dense(units=self.latent_dim,name='latent')(output)
+#             output=self.activations['latent'](output)
+#         else:
+#             output=Dense(units=self.latent_dim,activation=self.activations['latent'],name='latent')(output)
+#         if self.droprate:
+#             output=Dropout(rate=self.droprate)(output)
+#         output=Dense(units=self.output_dim,activation=self.activations['output'],name='output')(output)
+#         return output
+    
+    def _custom_loss(self,loss_f):
+        """
+        Wrapper to customize loss function (on latent space)
+        """
+        def loss(y_true, y_pred):
+#             L=tf.keras.losses.MSE(y_true, y_pred)
+            L=loss_f(y_true,y_pred)[0] # diff in potential
+            L+=tf.math.reduce_sum(tf.math.reduce_sum(self.batch_jacobian()*loss_f(y_true,y_pred)[1][:,:,None,None,None],axis=1)**2,axis=[1,2,3]) # diff in gradient potential
+            return L
+        return loss
+    
     def build(self,**kwargs):
         """
         Set up the network structure and compile the model with optimizer, loss and metrics.
@@ -78,16 +110,17 @@ class CNN:
         # initialize model
         input = Input(shape=self.input_shape, name='image_input')
         model = Sequential([input])
-#         model.add(input)
         # set model layers
         self.model = self._set_layers(model)
+#         output = self._set_layers(input)
+#         self.model = Model(input, output, name='cnn')
         # compile model
         optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
         metrics = kwargs.pop('metrics',['mae'])
-        self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
-
-    def train(self, x_train, y_train, x_test=None, y_test=None, epochs=100, batch_size=32, verbose=0):
+        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else loss, metrics=metrics, **kwargs)
+    
+    def train(self, x_train, y_train, x_test=None, y_test=None, epochs=100, batch_size=32, verbose=0, **kwargs):
         """
         Train the model with data
         """
@@ -97,15 +130,16 @@ class CNN:
             te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
             x_test, y_test = x_train[te_idx], y_train[te_idx]
             x_train, y_train = x_train[tr_idx], y_train[tr_idx]
-        es = EarlyStopping(monitor='loss', mode='auto', verbose=1)
+        patience = kwargs.pop('patience',0)
+        es = EarlyStopping(monitor='loss', mode='auto', verbose=1, patience=patience)
         self.history = self.model.fit(x_train, y_train,
                                       validation_data=(x_test, y_test),
                                       epochs=epochs,
                                       batch_size=batch_size,
                                       shuffle=True,
                                       callbacks=[es],
-                                      verbose=verbose)
-        
+                                      verbose=verbose, **kwargs)
+    
     def save(self, savepath='./',filename='cnn_model'):
         """
         Save the trained model for future use
@@ -137,18 +171,34 @@ class CNN:
         """
         Obtain Jacobian matrix of output wrt input
         """
-        x = tf.constant(input)
-        with tf.GradientTape() as g:
+#         x = tf.constant(input)
+        x = tf.Variable(input, trainable=True, dtype=tf.float32)
+        with tf.GradientTape(persistent=True) as g:
             g.watch(x)
             y = self.model(x)
         jac = g.jacobian(y,x).numpy()
         return np.squeeze(jac)
+    
+    def batch_jacobian(self, input=None):
+        """
+        Obtain Jacobian matrix of output wrt input
+        """
+        if input is None:
+            x = self.model.input
+        else:
+#             x = tf.constant(input)
+            x = tf.Variable(input, trainable=True, dtype=tf.float32)
+        with tf.GradientTape(persistent=True) as g:
+            g.watch(x)
+            y = self.model(x)
+        jac = g.batch_jacobian(y,x)
+        return jac if input is None else np.squeeze(jac.numpy())
 
 if __name__ == '__main__':
     import dolfin as df
     import sys
     sys.path.append( "../" )
-    from elliptic.Elliptic import Elliptic
+    from elliptic_inverse.Elliptic import Elliptic
     from util.dolfin_gadget import vec2fun,fun2img,img2fun
     # set random seed
     np.random.seed(2020)
