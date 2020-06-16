@@ -46,14 +46,15 @@ x_test,y_test=X[n_tr:],Y[n_tr:]
 # define CNN
 num_filters=[16,32]
 activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
+# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
 latent_dim=128
 droprate=.25
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-# loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
+loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
 cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
-        activations=activations, droprate=droprate, optimizer=optimizer)
+        activations=activations, droprate=droprate, optimizer=optimizer, padding='same')
 # cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
 #         activations=activations, droprate=droprate, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
@@ -65,7 +66,7 @@ except Exception as err:
     print(err)
     print('Train CNN...\n')
     epochs=200
-    patience = 5
+    patience = 0
     import timeit
     t_start=timeit.default_timer()
     cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)

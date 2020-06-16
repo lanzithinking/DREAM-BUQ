@@ -182,6 +182,8 @@ class CNN:
     def batch_jacobian(self, input=None):
         """
         Obtain Jacobian matrix of output wrt input
+        ------------------------------------------
+        Note: when using model input, it has to run with eager execution disabled in TF v2.2.0
         """
         if input is None:
             x = self.model.input

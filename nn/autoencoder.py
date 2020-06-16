@@ -83,12 +83,12 @@ class AutoEncoder:
         
         encoded_out = self._set_layers(input, 'encode')
         decoded_out = self._set_layers(latent_input, 'decode')
-
+        
         # encoder
         self.encoder = Model(input, encoded_out, name='encoder')
         # decoder
         self.decoder = Model(latent_input, decoded_out, name='decoder')
-
+        
         # full auto-encoder model
         self.model = Model(inputs=input, outputs=self.decoder(self.encoder(input)), name='autoencoder')
         
@@ -182,7 +182,7 @@ if __name__ == '__main__':
     epochs=200
     import timeit
     t_start=timeit.default_timer()
-    ae.train(ex_train,x_test,pochs,batch_size=64,verbose=1)
+    ae.train(x_train,x_test,epochs,batch_size=64,verbose=1)
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AutoEncoder: {}'.format(t_used))
     

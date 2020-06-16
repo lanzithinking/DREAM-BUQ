@@ -138,8 +138,8 @@ def img2fun(im,V):
     # Scalar function, interpolated to vertices
     elif f.value_rank() == 0:
         if V.ufl_element().degree()==1:
-            v2d = df.vertex_to_dof_map(V)
-            f.vector().set_local(im.flatten()[v2d])
+            d2v = df.dof_to_vertex_map(V)
+            f.vector().set_local(im.flatten()[d2v])
         elif V.ufl_element().degree()>1:
             V_deg1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
             im_f = df.Function(V_deg1)

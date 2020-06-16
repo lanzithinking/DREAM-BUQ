@@ -48,12 +48,12 @@ half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
 activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.01)
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
+               activation=activation, optimizer=optimizer)
 # # nll = lambda x: [-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0] for x_i in x]
 # # nll = lambda x: tf.map_fn(lambda x_i:-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0], x)
 # nll = lambda x,y: [(elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x[i].numpy().flatten()))[0]
-#                     -elliptic.get_geom(elliptic_latent.prior.gen_vector(y[i].numpy().flatten()))[0])**2 for i in range(x.shape[0])]
-ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
-               activation=activation, optimizer=optimizer)
+#                     -elliptic.get_geom(elliptic.prior.gen_vector(y[i].numpy().flatten()))[0])**2 for i in range(x.shape[0])]
 # ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 #                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
 # folder=folder+'/saved_model'
@@ -69,9 +69,10 @@ except Exception as err:
     print(err)
     print('Train AutoEncoder...\n')
     epochs=200
+    patience=0
     import timeit
     t_start=timeit.default_timer()
-    ae.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1)
+    ae.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AE: {}'.format(t_used))
     # save AE
@@ -79,8 +80,7 @@ except Exception as err:
     ae.encoder.save(os.path.join(folder,f_name[1]))
     ae.decoder.save(os.path.join(folder,f_name[2]))
 
-# some more test
-# loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
+# plot
 import matplotlib.pyplot as plt
 fig = plt.figure(figsize=(15,5), facecolor='white')
 plt.ion()
