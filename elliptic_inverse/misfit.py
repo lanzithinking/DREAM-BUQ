@@ -13,7 +13,7 @@ Modified September 28, 2019 in FEniCS 2019.1.0 (python 3) @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2016, The EQUIP/EQUiPS projects"
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "S.Lan@warwick.ac.uk; slan@caltech.edu; lanzithinking@outlook.com; slan@asu.edu"
 
@@ -163,6 +163,14 @@ class data_misfit(object):
             idx_dirac_local = self.idx # indices relative to V
         sub_dofs = np.array(self.pde.W.sub(0).dofmap().dofs()) # dof map: V --> W
         self.idx_dirac_global = sub_dofs[idx_dirac_local] # indices relative to W
+    def obs_realign(self):
+        """
+        Re-Align locations and indices-in-dofs of observations
+        """
+        self.idx,self.loc,rel_idx = check_in_dof(self.loc,self.pde.V,tol=1e-6)
+        self.obs = self.obs[rel_idx]
+        print('%d observations have been retained!' % len(self.idx))
+        
     def _extr_soloc(self,u):
         """
         Return solution (u) values at the observational locations.

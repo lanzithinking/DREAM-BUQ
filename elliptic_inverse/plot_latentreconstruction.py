@@ -22,7 +22,7 @@ SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # define the latent (coarser) inverse problem
 nx=20; ny=20
-elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR)
+elliptic_latent = elliptic.change_mesh(nx=nx,ny=ny)
 # algorithms
 algs=['EKI','EKS']
 num_algs=len(algs)

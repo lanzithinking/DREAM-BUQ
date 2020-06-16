@@ -22,7 +22,7 @@ SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # define the latent (coarser) inverse problem
 nx=20; ny=20
-elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR)
+elliptic_latent = elliptic.change_mesh(nx=nx,ny=ny)
 # algorithms
 algs=['EKI','EKS']
 num_algs=len(algs)
@@ -50,22 +50,22 @@ x_test=X[n_tr:]
 
 # define AE
 num_filters=[16,32]
-activations={'conv':'linear','latent':tf.keras.layers.PReLU()}
+# activations={'conv':'linear','latent':tf.keras.layers.PReLU()}
 # activations={'conv':'relu','latent':'linear'}
-# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':'linear'}
+activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':'linear'}
 latent_dim=441
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
-                    activations=activations, optimizer=optimizer)
+# cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
+#                     activations=activations, optimizer=optimizer)
 # # nll = lambda x: [-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0] for x_i in x]
-# # nll = lambda x: tf.map_fn(lambda x_i:-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0], x)
+nll = lambda x,_: tf.map_fn(lambda x_i:-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0], x)
 # nll = lambda x,y: [(elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x[i].numpy().flatten()))[0]
 #                     -elliptic.get_geom(img2fun(np.squeeze(y[i].numpy()),elliptic.pde.V).vector())[0])**2 for i in range(x.shape[0])]
-# cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
-#                     activations=activations, optimizer=optimizer, loss=nll, run_eagerly=True)
+cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
+                    activations=activations, optimizer=optimizer, loss=nll, run_eagerly=True)
 # folder=folder+'/saved_model'
-f_name=['cae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
+f_name=['cae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'customloss.h5' for i in ('fullmodel','encoder','decoder')]
 try:
     cae.model=load_model(os.path.join(folder,f_name[0]),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')

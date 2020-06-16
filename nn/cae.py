@@ -102,7 +102,7 @@ class ConvAutoEncoder:
         Wrapper to customize loss function (on latent space)
         """
         def loss(y_true, y_pred):
-            L=.5*tf.keras.losses.MSE(y_true, y_pred) # mse: prior
+            L=.5*tf.math.reduce_sum((y_true-y_pred)**2,axis=[1,2,3]) # mse: prior
             L+=loss_f(self.encoder(y_true),y_pred) # potential on latent space: likelihood
             return L
         return loss

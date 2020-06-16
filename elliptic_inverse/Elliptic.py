@@ -20,7 +20,7 @@ Modified September 28, 2019 in FEniCS 2019.1.0 (python 3) @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2016, The EQUIP/EQUiPS projects"
 __license__ = "GPL"
-__version__ = "1.1"
+__version__ = "1.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "S.Lan@warwick.ac.uk; slan@caltech.edu; lanzithinking@outlook.com; slan@asu.edu"
 
@@ -64,10 +64,33 @@ class Elliptic:
         # set low-rank approximate Gaussian posterior
         self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
         print('\nApproximate posterior model is set.\n')
+        # save parameters
+        self.kwargs = kwargs
         
         # count PDE solving times
 #         self.soln_count = np.zeros(4)
         # 0-3: number of solving (forward,adjoint,2ndforward,2ndadjoint) equations respectively
+    
+    def change_mesh(self,nx=20,ny=20,**kwargs):
+        """
+        Redefine the inverse problem on a new mesh
+        """
+        self.kwargs.update(kwargs)
+        # redefine pde
+        self.pde = ellipticPDE(nx=nx,ny=ny,nugg=self.pde.nugg)
+#         self.mpi_comm = self.pde.mpi_comm
+        print('\nPhysical PDE model has been re-defined.')
+        # set prior
+        self.prior = Gaussian_prior(V=self.pde.V,mpi_comm=self.pde.mpi_comm,**self.kwargs)
+        print('\nNew prior model has been specified.')
+        # set misfit
+        self.misfit.pde = self.pde
+        self.misfit.obs_realign()
+        print('\nLikelihood model has been updated.')
+        # set low-rank approximate Gaussian posterior
+        self.post_Ga = Gaussian_apx_posterior(self.prior,eigs='hold')
+        print('\nNew approximate posterior model has been set.\n')
+        return self
     
     def _get_misfit(self):
         """
