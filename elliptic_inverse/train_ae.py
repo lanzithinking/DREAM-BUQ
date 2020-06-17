@@ -22,7 +22,8 @@ SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # define the latent (coarser) inverse problem
 nx=20; ny=20
-elliptic_latent = elliptic.change_mesh(nx=nx,ny=ny)
+obs,nzsd,loc=[getattr(elliptic.misfit,i) for i in ('obs','nzsd','loc')]
+elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR,obs=obs,nzsd=nzsd,loc=loc)
 # algorithms
 algs=['EKI','EKS']
 num_algs=len(algs)

@@ -51,16 +51,16 @@ class _true_coeff(df.Expression if df.__version__<='1.6.0' else df.UserExpressio
 #         matplot.show()
         return fig
 
-# def _get_sd_noise(prior,SNR=10,num_priors=100):
+# def _get_nzsd(prior,SNR=10,num_priors=100):
 #     """
-#     Get standard deviation of noise based on Signal-Noise-Ratio, SNR:=max{u}/sd_noise, where u~prior
+#     Get standard deviation of noise based on Signal-Noise-Ratio, SNR:=max{u}/nzsd, where u~prior
 #     """
 #     u_max=0
 #     for n in range(num_priors):
 #         u_max+=prior.sample().max()
 #     u_max/=num_priors
-#     sd_noise=u_max/SNR
-#     return sd_noise
+#     nzsd=u_max/SNR
+#     return nzsd
     
 def get_obs(pde4inf=None,unknown=None,SNR=10,SAVE=False):
     """
@@ -71,13 +71,13 @@ def get_obs(pde4inf=None,unknown=None,SNR=10,SAVE=False):
     Output:
     obs: observation values, PDE solutions at selected locations contaminated with noise.
     idx,loc: dof indices and coordinate locations of observations in the solution domain.
-    sd_noise: standard noise of the noise added to PDE solutions.
+    nzsd: standard noise of the noise added to PDE solutions.
     """
     import os,pickle
     f_obs=os.path.join(os.getcwd(),'obs_SNR'+str(SNR)+'_py'+str(sys.version_info[0])+'.pckl')
     if os.path.isfile(f_obs) and unknown is None:
         f=open(f_obs,'rb')
-        obs,idx,loc,sd_noise=pickle.load(f)
+        obs,idx,loc,nzsd=pickle.load(f)
         f.close()
         # update indices, locations and observations on the FEM for inference
         idx,loc,rel_idx = check_in_dof(loc,pde4inf.V,tol=1e-6)
@@ -113,10 +113,10 @@ def get_obs(pde4inf=None,unknown=None,SNR=10,SAVE=False):
         else:
             sol_on_loc = [u(list(x)) for x in loc]
         # obtain standard deviation of noise
-#         sd_noise = _get_sd_noise(prior,SNR=SNR)
+#         nzsd = _get_nzsd(prior,SNR=SNR)
         u_max = np.max(np.abs([unknown.vector().min(),unknown.vector().max()]))
-        sd_noise = u_max/SNR
-        obs = sol_on_loc + sd_noise*np.random.randn(len(sol_on_loc))
+        nzsd = u_max/SNR
+        obs = sol_on_loc + nzsd*np.random.randn(len(sol_on_loc))
         # revert to the original coarser mesh for inference
         # update indices, locations and observations
         idx,loc,rel_idx = check_in_dof(loc,pde4inf.V,tol=1e-6)
@@ -125,9 +125,9 @@ def get_obs(pde4inf=None,unknown=None,SNR=10,SAVE=False):
         # save observations to file
         if SAVE:
             f=open(f_obs,'wb')
-            pickle.dump([obs,idx,loc,sd_noise],f)
+            pickle.dump([obs,idx,loc,nzsd],f)
             f.close()
-    return obs,sd_noise,idx,loc
+    return obs,nzsd,idx,loc
 
 class data_misfit(object):
     """
@@ -137,17 +137,22 @@ class data_misfit(object):
     Input: PDE model, observation values, precision of observational noise, dof indices or coordinate locations of observations.
     Output: dof indices relative to the mixed function space, and methods to provide right hand sides of forward/adjoint equations.
     """
-    def __init__(self,pde,obs=None,sd_noise=None,idx=None,loc=None,**kwargs):
+    def __init__(self,pde,obs=None,nzsd=None,idx=None,loc=None,**kwargs):
         """
         Initialize data-misfit class with information of observations.
         """
         self.pde = pde
-        if None in [obs,sd_noise,idx] or None in [obs,sd_noise,loc]:
-            obs,sd_noise,idx,loc=get_obs(pde4inf=pde,SAVE=True,**kwargs)
+        if any(i is None for i in [obs,nzsd,idx]) and any(i is None for i in [obs,nzsd,loc]):
+            obs,nzsd,idx,loc=get_obs(pde4inf=pde,SAVE=True,**kwargs)
+        elif all(i is not None for i in [obs,loc]):
+            idx,loc,rel_idx = check_in_dof(loc,pde.V,tol=1e-6)
+            obs = obs[rel_idx]
+            print('%d observations have been retained!' % len(idx))
         self.obs = obs
-        self.prec = 1.0/sd_noise**2
+        self.nzsd = nzsd
         self.idx = idx
         self.loc = loc
+        self.prec = 1.0/nzsd**2
         self.SNR = kwargs.pop('SNR',10)
 #         # define point (Dirac) measure centered at observation locations, but point integral is limited to CG1
 #         # error when compiling: Expecting test and trial spaces to only have dofs on vertices for point integrals.
@@ -163,14 +168,6 @@ class data_misfit(object):
             idx_dirac_local = self.idx # indices relative to V
         sub_dofs = np.array(self.pde.W.sub(0).dofmap().dofs()) # dof map: V --> W
         self.idx_dirac_global = sub_dofs[idx_dirac_local] # indices relative to W
-    def obs_realign(self):
-        """
-        Re-Align locations and indices-in-dofs of observations
-        """
-        self.idx,self.loc,rel_idx = check_in_dof(self.loc,self.pde.V,tol=1e-6)
-        self.obs = self.obs[rel_idx]
-        print('%d observations have been retained!' % len(self.idx))
-        
     def _extr_soloc(self,u):
         """
         Return solution (u) values at the observational locations.
