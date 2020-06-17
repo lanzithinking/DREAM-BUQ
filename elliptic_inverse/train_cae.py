@@ -12,6 +12,14 @@ from util.dolfin_gadget import vec2fun,fun2img,img2fun
 from nn.cae import ConvAutoEncoder
 from tensorflow.keras.models import load_model
 
+# functions needed to make even image size
+def pad(A,sz=1):
+    A_padded=np.zeros([i+sz for i in A.shape])
+    A_padded[:-sz,:-sz]=A
+    return A_padded
+def chop(A,sz=1):
+    return A[:-sz,:-sz]
+
 # set random seed
 np.random.seed(2020)
 tf.random.set_seed(2020)
@@ -21,7 +29,7 @@ nx=40; ny=40
 SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # define the latent (coarser) inverse problem
-nx=20; ny=20
+nx=10; ny=10
 obs,nzsd,loc=[getattr(elliptic.misfit,i) for i in ('obs','nzsd','loc')]
 elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR,obs=obs,nzsd=nzsd,loc=loc)
 # algorithms
@@ -50,21 +58,25 @@ x_train=X[:n_tr]
 x_test=X[n_tr:]
 
 # define AE
-num_filters=[16,32]
+num_filters=[16,1]
 # activations={'conv':'linear','latent':tf.keras.layers.PReLU()}
 # activations={'conv':'relu','latent':'linear'}
-activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':'linear'}
-latent_dim=441
+# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':'linear'}
+activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None}
+latent_dim=elliptic_latent.prior.dim
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
 cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
                     activations=activations, optimizer=optimizer)
+# nlpr = lambda y: tf.map_fn(lambda y_i:-elliptic.prior.logpdf(img2fun(np.squeeze(y_i.numpy()),elliptic.pde.V).vector()), y)
 # # nll = lambda x: [-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0] for x_i in x]
 # nll = lambda x,_: tf.map_fn(lambda x_i:-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0], x)
 # nll = lambda x,y: [(elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x[i].numpy().flatten()))[0]
 #                     -elliptic.get_geom(img2fun(np.squeeze(y[i].numpy()),elliptic.pde.V).vector())[0])**2 for i in range(x.shape[0])]
+# nlpost = lambda x,y: [-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x[i].numpy().flatten()))[0]
+#                       -elliptic.prior.logpdf(img2fun(pad(np.squeeze(y[i].numpy())),elliptic.pde.V).vector()) for i in range(x.shape[0])]
 # cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
-#                     activations=activations, optimizer=optimizer, loss=nll, run_eagerly=True)
+#                     activations=activations, optimizer=optimizer, loss=nlpost, run_eagerly=True)
 # folder=folder+'/saved_model'
 f_name=['cae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
 try:
@@ -161,17 +173,16 @@ sub_figs[0]=df.plot(u_f)
 # sub_figs[0]=plt.imshow(fun2img(u_f),origin='lower')
 plt.title('Original')
 plt.axes(axes.flat[1])
-u_f_lat.vector().set_local(u_encoded.flatten())
+# u_f_lat.vector().set_local(u_encoded.flatten())
 # u_f_lat=img2fun(u_encoded.reshape((nx+1,ny+1)),elliptic_latent.pde.V)
+u_f_lat=img2fun(pad(np.squeeze(u_encoded)),elliptic_latent.pde.V)
 sub_figs[1]=df.plot(u_f_lat)
 # sub_figs[1]=plt.imshow(u_encoded.reshape((nx+1,ny+1)),origin='lower')
 plt.title('Latent')
 plt.axes(axes.flat[2])
 u_decoded=np.squeeze(u_decoded)
 # u_decoded*=X_max; u_decoded+=X_min
-u_decoded1=np.zeros([i+1 for i in u_decoded.shape])
-u_decoded1[:-1,:-1]=u_decoded
-u_f=img2fun(u_decoded1,elliptic.pde.V)
+u_f=img2fun(pad(u_decoded),elliptic.pde.V)
 sub_figs[2]=df.plot(u_f)
 # sub_figs[2]=plt.imshow(u_decoded,origin='lower')
 plt.title('Reconstructed')

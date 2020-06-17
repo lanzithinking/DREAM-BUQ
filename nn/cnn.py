@@ -10,7 +10,7 @@ Created June 4, 2020
 __author__ = "Shiwei Lan; Shuyi Li"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -48,8 +48,9 @@ class CNN:
         self.strides = strides
         self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear','output':'softmax'})
         self.latent_dim = kwargs.pop('latent_dim',self.input_shape[0]+self.output_dim)
-        self.padding = kwargs.pop('padding','valid')
+        self.padding = kwargs.pop('padding','same')
         self.droprate = kwargs.pop('droprate',0)
+        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)
     
@@ -59,17 +60,17 @@ class CNN:
         """
         for i in range(self.conv_depth):
             model.add(Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
-                             activation=self.activations['conv'], name='conv_layer{}'.format(i)))
+                             activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='conv_layer{}'.format(i)))
             model.add(MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i)))
         model.add(Flatten())
         if callable(self.activations['latent']):
-            model.add(Dense(units=self.latent_dim,name='latent'))
+            model.add(Dense(units=self.latent_dim, kernel_initializer=self.kernel_initializer, name='latent'))
             model.add(self.activations['latent'])
         else:
-            model.add(Dense(units=self.latent_dim,activation=self.activations['latent'],name='latent'))
+            model.add(Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='latent'))
         if self.droprate:
             model.add(Dropout(rate=self.droprate))
-        model.add(Dense(units=self.output_dim,activation=self.activations['output'],name='output'))
+        model.add(Dense(units=self.output_dim, activation=self.activations['output'], kernel_initializer=self.kernel_initializer ,name='output'))
         return model
     
 #     def _set_layers(self, input):
@@ -79,17 +80,17 @@ class CNN:
 #         output=input
 #         for i in range(self.conv_depth):
 #             output=Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
-#                           activation=self.activations['conv'], name='conv_layer{}'.format(i))(output)
+#                           activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='conv_layer{}'.format(i))(output)
 #             output=MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i))(output)
 #         output=Flatten()(output)
 #         if callable(self.activations['latent']):
-#             output=Dense(units=self.latent_dim,name='latent')(output)
+#             output=Dense(units=self.latent_dim, kernel_initializer=self.kernel_initializer, name='latent')(output)
 #             output=self.activations['latent'](output)
 #         else:
-#             output=Dense(units=self.latent_dim,activation=self.activations['latent'],name='latent')(output)
+#             output=Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='latent')(output)
 #         if self.droprate:
 #             output=Dropout(rate=self.droprate)(output)
-#         output=Dense(units=self.output_dim,activation=self.activations['output'],name='output')(output)
+#         output=Dense(units=self.output_dim, activation=self.activations['output'], kernel_initializer=self.kernel_initializer, name='output')(output)
 #         return output
     
     def _custom_loss(self,loss_f):

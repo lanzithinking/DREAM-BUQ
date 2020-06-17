@@ -50,6 +50,7 @@ class ConvAutoEncoder:
         self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear'})
         self.padding = kwargs.pop('padding','same')
         assert self.padding=='same', 'Padding has to set as "same"!'
+        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)
     
@@ -61,15 +62,17 @@ class ConvAutoEncoder:
         output = input
         for i in range(self.half_depth):
             output=Conv2D(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                          activation=self.activations['conv'], name='encode_conv_layer{}'.format(i))(output)
+                          activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='encode_conv_layer{}'.format(i))(output)
             output=MaxPooling2D(pool_size=self.pool_size, name='encode_pool_layer{}'.format(i))(output)
         if self.activations['latent'] is not None:
             output=Flatten()(output)
             if callable(self.activations['latent']):
-                output = Dense(units=self.latent_dim, name='encode_out')(output)
+                output = Dense(units=self.latent_dim, kernel_initializer=self.kernel_initializer, name='encode_out')(output)
                 output = self.activations['latent'](output)
             else:
-                output = Dense(units=self.latent_dim, activation=self.activations['latent'], name='encode_out')(output)
+                output = Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='encode_out')(output)
+        else:
+            self.latent_dim=output.shape[1:]
         return output
     
     def _set_decode_layers(self, input):
@@ -83,18 +86,18 @@ class ConvAutoEncoder:
             pre_flatten_dim = np.prod(pre_flatten_shape)
             if callable(self.activations['latent']):
                 output = self.activations['latent'](output)
-                output = Dense(units=pre_flatten_dim, name='decode_in')(output)
+                output = Dense(units=pre_flatten_dim, kernel_initializer=self.kernel_initializer, name='decode_in')(output)
             else:
-                output = Dense(units=pre_flatten_dim, activation=self.activations['latent'], name='decode_in')(output)
+                output = Dense(units=pre_flatten_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='decode_in')(output)
             output = Reshape(pre_flatten_shape)(output)
         for i in range(self.half_depth):
             output=UpSampling2D(size=self.pool_size, name='decode_unpool_layer{}'.format(i))(output)
             if i<self.half_depth-1:
                 output=Conv2DTranspose(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                                       activation=self.activations['conv'], name='decode_deconv_layer{}'.format(i))(output)
+                                       activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='decode_deconv_layer{}'.format(i))(output)
             else:
                 output=Conv2DTranspose(filters=1, kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                                       activation=self.activations['conv'], name='decode_out')(output)
+                                       activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='decode_out')(output)
         return output
     
     def _custom_loss(self,loss_f):
@@ -104,6 +107,7 @@ class ConvAutoEncoder:
         def loss(y_true, y_pred):
             L=.5*tf.math.reduce_sum((y_true-y_pred)**2,axis=[1,2,3]) # mse: prior
             L+=loss_f(self.encoder(y_true),y_pred) # potential on latent space: likelihood
+#             L=loss_f(self.encoder(y_true),y_true-y_pred)
             return L
         return loss
         
@@ -170,7 +174,7 @@ class ConvAutoEncoder:
         """
         Output decoded state
         """
-        assert input.shape[1]==self.latent_dim, 'Wrong input dimension for decoder!'
+        assert input.shape[1:]==self.latent_dim if self.activations['latent'] is None else input.shape[1]==self.latent_dim, 'Wrong input dimension for decoder!'
         return self.decoder.predict(input)
     
     def jacobian(self, input, coding='encode'):

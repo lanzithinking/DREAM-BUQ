@@ -142,8 +142,9 @@ class data_misfit(object):
         Initialize data-misfit class with information of observations.
         """
         self.pde = pde
+        self.SNR = kwargs.pop('SNR',10)
         if any(i is None for i in [obs,nzsd,idx]) and any(i is None for i in [obs,nzsd,loc]):
-            obs,nzsd,idx,loc=get_obs(pde4inf=pde,SAVE=True,**kwargs)
+            obs,nzsd,idx,loc=get_obs(pde4inf=pde,unknown=kwargs.pop('unknown',None),SNR=self.SNR,SAVE=True)
         elif all(i is not None for i in [obs,loc]):
             idx,loc,rel_idx = check_in_dof(loc,pde.V,tol=1e-6)
             obs = obs[rel_idx]
@@ -153,7 +154,6 @@ class data_misfit(object):
         self.idx = idx
         self.loc = loc
         self.prec = 1.0/nzsd**2
-        self.SNR = kwargs.pop('SNR',10)
 #         # define point (Dirac) measure centered at observation locations, but point integral is limited to CG1
 #         # error when compiling: Expecting test and trial spaces to only have dofs on vertices for point integrals.
 #         pts_domain = df.VertexFunction("size_t", self.pde.mesh, 0) # limited to vertices, TODO: generalize to e.g. dofs nodal points

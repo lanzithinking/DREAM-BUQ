@@ -44,11 +44,11 @@ x_train,y_train=X[:n_tr],Y[:n_tr]
 x_test,y_test=X[n_tr:],Y[n_tr:]
 
 # define CNN
-num_filters=[16,32]
+num_filters=[16,8]
 activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
 # activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
 latent_dim=128
-droprate=.25
+droprate=.5
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
