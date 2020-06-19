@@ -52,12 +52,12 @@ latent_dim=128
 droprate=.5
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-#cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
-#        activations=activations, droprate=droprate, optimizer=optimizer, padding='same')
-loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
-custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
 cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
-         activations=activations, droprate=droprate, optimizer=optimizer, loss=custom_loss)
+        activations=activations, droprate=droprate, optimizer=optimizer, padding='same')
+loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
+#custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
+#cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
+#         activations=activations, droprate=droprate, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
 f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'
 try:
