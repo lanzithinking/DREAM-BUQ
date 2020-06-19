@@ -32,12 +32,12 @@ alg_no=1
 # define the autoencoder (AE)
 # load data
 ensbl_sz = 500
-folder = './train_DNN'
+folder = './train_NN'
 loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
 X=loaded['X']
 # pre-processing: scale X to 0-1
-# X-=np.nanmin(X,axis=(1,2),keepdims=True) # try axis=(1,2,3)
-# X/=np.nanmax(X,axis=(1,2),keepdims=True)
+# X-=np.nanmin(X,axis=1,keepdims=True)
+# X/=np.nanmax(X,axis=1,keepdims=True)
 # split train/test
 num_samp=X.shape[0]
 n_tr=np.int(num_samp*.75)

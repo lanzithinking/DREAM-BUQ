@@ -1,13 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Wed Jun 17 18:03:47 2020
-
-@author: apple
-"""
-
-"""
-This is to train AutoEncoder for dimension reduction.
+This is to train DNN to emulate (extracted) gradients compared with those exactly calculated.
 """
 
 import numpy as np
@@ -16,12 +8,10 @@ import tensorflow as tf
 import sys,os
 sys.path.append( "../" )
 from Elliptic import Elliptic
-# from util.dolfin_gadget import vec2fun,fun2img,img2fun
 from nn.dnn import DNN
-from util.dolfin_gadget import vec2fun,fun2img,img2fun
 from tensorflow.keras.models import load_model
 
-#tf.compat.v1.disable_eager_execution()
+# tf.compat.v1.disable_eager_execution() # needed to train with custom loss # comment to plot
 # set random seed
 np.random.seed(2020)
 tf.random.set_seed(2020)
@@ -30,26 +20,22 @@ tf.random.set_seed(2020)
 nx=40; ny=40
 SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
-# define the latent (coarser) inverse problem
-nx=20; ny=20
-obs,nzsd,loc=[getattr(elliptic.misfit,i) for i in ('obs','nzsd','loc')]
-elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR,obs=obs,nzsd=nzsd,loc=loc)
 # algorithms
 algs=['EKI','EKS']
 num_algs=len(algs)
-alg_no=0
+alg_no=1
 
-# define the autoencoder (AE)
+# define the emulator (DNN)
 # load data
-ensbl_sz = 250
-folder = './train_DNN'
-loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
+ensbl_sz = 500
+folder = './train_NN'
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
 X=loaded['X']
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
 Y=loaded['Y']
-X = X.reshape((-1,41*41))
 # pre-processing: scale X to 0-1
-# X-=np.nanmin(X,axis=(1),keepdims=True) # try axis=(1,2,3)
-# X/=np.nanmax(X,axis=(1),keepdims=True)
+# X-=np.nanmin(X,axis=1,keepdims=True)
+# X/=np.nanmax(X,axis=1,keepdims=True)
 # split train/test
 num_samp=X.shape[0]
 n_tr=np.int(num_samp*.75)
@@ -57,39 +43,42 @@ x_train,y_train=X[:n_tr],Y[:n_tr]
 x_test,y_test=X[n_tr:],Y[n_tr:]
 
 # define DNN
-activation='linear'
-# activation=tf.keras.layers.LeakyReLU(alpha=0.01)
-droprate=.25
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001, amsgrad=True)
+depth=3
+# activation='linear'
+# activation=tf.keras.layers.LeakyReLU(alpha=0.1)
+# activation=tf.keras.layers.Lambda(tf.math.sin)
+activation=tf.math.sin
+droprate=.4
+kernel_initializer=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+# optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
+dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth,
+        activation=activation, droprate=droprate, kernel_initializer=kernel_initializer, optimizer=optimizer)
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
-custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
-
-dnn=DNN(x_train.shape[1], y_train.shape[1], depth=4, node_sizes = np.array([512,256,128,25]), 
-        activation=activation, droprate=droprate, optimizer=optimizer,loss=custom_loss)
-f_name='dnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'
-
-# # nll = lambda x: [-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0] for x_i in x]
-# # nll = lambda x: tf.map_fn(lambda x_i:-elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x_i.numpy().flatten()))[0], x)
-# nll = lambda x,y: [(elliptic_latent.get_geom(elliptic_latent.prior.gen_vector(x[i].numpy().flatten()))[0]
-#                     -elliptic.get_geom(elliptic.prior.gen_vector(y[i].numpy().flatten()))[0])**2 for i in range(x.shape[0])]
-# ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
-#                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
+# custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
+# dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth,
+#         activation=activation, droprate=droprate, kernel_initializer=kernel_initializer, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
+f_name='dnn_'+algs[alg_no]+str(ensbl_sz)+'customloss.h5'
 try:
-    dnn.model=load_model(os.path.join(folder,f_name),custom_objects={'loss':None})
+#     dnn.model=load_model(os.path.join(folder,f_name))
+#     dnn.model=load_model(os.path.join(folder,f_name),custom_objects={'loss':None})
+    dnn.model=load_weights(os.path.join(folder,f_name))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
-    print('Train AutoEncoder...\n')
+    print('Train DNN...\n')
     epochs=200
     patience=0
     import timeit
     t_start=timeit.default_timer()
-    dnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=32,patience=5,verbose=1)
+    dnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
     t_used=timeit.default_timer()-t_start
-    print('\nTime used for training AE: {}'.format(t_used))
+    print('\nTime used for training DNN: {}'.format(t_used))
     # save DNN
-    dnn.model.save(os.path.join(folder,f_name))
+#     dnn.model.save(os.path.join(folder,f_name))
+#     dnn.save(folder,'dnn_'+algs[alg_no]+str(ensbl_sz))
+    dnn.model.save_weights(os.path.join(folder,f_name))
 
 # some more test
 logLik = lambda x: loglik(dnn.model(x))
@@ -100,16 +89,15 @@ fig = plt.figure(figsize=(12,6), facecolor='white')
 plt.ion()
 # plt.show(block=True)
 u_f = df.Function(elliptic.pde.V)
-for n in range(10):
-    u=elliptic.prior.sample() #(1681,)
+for n in range(20):
+    u=elliptic.prior.sample()
     # calculate gradient
     t_start=timeit.default_timer()
-    dll_xact = elliptic.get_geom(u,[0,1])[1] #(1681,)
+    dll_xact = elliptic.get_geom(u,[0,1])[1]
     t_used[0] += timeit.default_timer()-t_start
     # emulate gradient
     t_start=timeit.default_timer()
-    #u_img=fun2img(vec2fun(u,elliptic.pde.V)) transform u(1681) to u_img(41,41)
-    dll_emul = dnn.gradient(u.get_local()[None,:],logLik) #(1681,)
+    dll_emul = dnn.gradient(u.get_local()[None,:], logLik)
     t_used[1] += timeit.default_timer()-t_start
     # test difference
     dif = dll_xact.get_local() - dll_emul
@@ -117,11 +105,9 @@ for n in range(10):
     
     # check the gradient extracted from emulation
     v=elliptic.prior.sample()
-    #v_img=fun2img(vec2fun(v,elliptic.pde.V))
     h=1e-4
-    #dll_emul_fd_v=(logLik(u_img[None,:,:,None]+h*v_img[None,:,:,None])-logLik(u_img[None,:,:,None]))/h
     dll_emul_fd_v=(logLik(u.get_local()[None,:]+h*v.get_local()[None,:])-logLik(u.get_local()[None,:]))/h
-    reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v.get_local().flatten()))/v.norm('l2')
+    reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v.get_local()))/v.norm('l2')
     print('Relative difference between finite difference and extracted results: {}'.format(reldif))
     
     # plot
@@ -130,7 +116,6 @@ for n in range(10):
     df.plot(u_f)
     plt.title('Calculated Gradient')
     plt.subplot(122)
-    #u_f=img2fun(dll_emul,elliptic.pde.V)
     u_f.vector().set_local(dll_emul)
     df.plot(u_f)
     plt.title('Emulated Gradient')
@@ -139,3 +124,44 @@ for n in range(10):
     
 print('Time used to calculate vs emulate gradients: {} vs {}'.format(*t_used.tolist()))
 
+
+# read data and construct plot functions
+u_f = df.Function(elliptic.pde.V)
+# read MAP
+try:
+    f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
+    f.read(u_f,"parameter")
+    f.close()
+except:
+    pass
+u=u_f.vector()
+# u=elliptic.prior.sample()
+logLik = lambda x: loglik(dnn.model(x))
+# calculate gradient
+dll_xact = elliptic.get_geom(u,[0,1])[1]
+# emulate gradient
+dll_emul = dnn.gradient(u.get_local()[None,:], logLik)
+ 
+# plot
+import matplotlib.pyplot as plt
+import matplotlib as mp
+plt.rcParams['image.cmap'] = 'jet'
+fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=True,figsize=(12,6))
+sub_figs=[None]*2
+# plot
+plt.axes(axes.flat[0])
+u_f.vector().set_local(dll_xact)
+sub_figs[0]=df.plot(u_f)
+plt.title('Calculated Gradient')
+plt.axes(axes.flat[1])
+u_f.vector().set_local(dll_emul)
+sub_figs[1]=df.plot(u_f)
+plt.title('Emulated Gradient')
+# add common colorbar
+from util.common_colorbar import common_colorbar
+fig=common_colorbar(fig,axes,sub_figs)
+ 
+# save plots
+# fig.tight_layout(h_pad=1)
+plt.savefig(os.path.join(folder,'extrctgrad_dnn.png'),bbox_inches='tight')
+# plt.show()

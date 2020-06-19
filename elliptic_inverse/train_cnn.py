@@ -12,8 +12,7 @@ from util.dolfin_gadget import vec2fun,fun2img,img2fun
 from nn.cnn import CNN
 from tensorflow.keras.models import load_model
 
-#tf.compat.v1.disable_eager_execution() # needed to train with custom loss # comment to plot
-#tf.config.experimental_run_functions_eagerly(True)
+# tf.compat.v1.disable_eager_execution() # needed to train with custom loss # comment to plot
 # set random seed
 np.random.seed(2020)
 tf.random.set_seed(2020)
@@ -30,7 +29,7 @@ alg_no=1
 # define the emulator (CNN)
 # load data
 ensbl_sz = 500
-folder = './train_DNN'
+folder = './train_NN'
 loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
 X=loaded['X']
 Y=loaded['Y']
@@ -55,14 +54,13 @@ optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
         activations=activations, droprate=droprate, optimizer=optimizer, padding='same')
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
-#custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
-#cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
+# custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
+# cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
 #         activations=activations, droprate=droprate, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
 f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'
 try:
     cnn.model=load_model(os.path.join(folder,f_name),custom_objects={'loss':None})
-    #cnn.model=load_model(os.path.join(folder,f_name),custom_objects={"loss": custom_loss,'LeakyReLU': tf.keras.layers.LeakyReLU(alpha=0.1)})
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)

@@ -2,8 +2,8 @@
 """
 Convolutional Neural Network
 Shiwei Lan @ASU, 2020
---------------------------------------
-Standard AutoEncoder in TensorFlow 2.2
+------------------------------
+Standard CNN in TensorFlow 2.2
 --------------------
 Created June 4, 2020
 """
@@ -259,7 +259,7 @@ if __name__ == '__main__':
 #         reconstructed_model=load_model('XX_model.h5')
     
     # some more test
-    loglik = lambda x: 0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
+    loglik = lambda x: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)
     import timeit
     t_used = np.zeros((1,2))
     import matplotlib.pyplot as plt

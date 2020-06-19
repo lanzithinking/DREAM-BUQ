@@ -45,6 +45,7 @@ class AutoEncoder:
             self.node_sizes = np.concatenate((self.node_sizes,self.node_sizes[-2::-1]))
         if not np.all([self.node_sizes[i]==self.dim for i in (0,-1)]):
             raise ValueError('End node sizes not matching input/output dimensions!')
+        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)
     
@@ -57,10 +58,10 @@ class AutoEncoder:
         for i in range(self.half_depth):
             layer_name = "{}_out".format(coding) if i==self.half_depth-1 else "{}_layer{}".format(coding,i)
             if callable(self.activation):
-                output = Dense(units=node_sizes[i+1], name=layer_name)(output)
+                output = Dense(units=node_sizes[i+1], kernel_initializer=self.kernel_initializer, name=layer_name)(output)
                 output = self.activation(output)
             else:
-                output = Dense(units=node_sizes[i+1], activation=self.activation, name=layer_name)(output)
+                output = Dense(units=node_sizes[i+1], activation=self.activation, kernel_initializer=self.kernel_initializer, name=layer_name)(output)
         return output
     
     def _custom_loss(self,loss_f):
