@@ -10,14 +10,13 @@ Created June 17, 2020
 __author__ = "Shuyi Li; Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input,Dense,Dropout
-# from tensorflow.keras.models import Sequential
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
@@ -31,38 +30,24 @@ class DNN:
         input_dim: the dimension of the input space
         output_dim: the dimension of the output space
         depth: the depth of the network
-        activation: specification of activation function, can be a string or a Keras activation layer
         node_sizes: sizes of the nodes of the network
         droprate: the rate of Dropout
+        activations: specification of activation functions, can be a list of strings or Keras activation layers
+        kernel_initializers: kernel_initializers corresponding to activations
         """
         self.input_dim=input_dim
         self.output_dim=output_dim
         self.depth = depth
-        self.activation = kwargs.pop('activation','linear')
         self.node_sizes = kwargs.pop('node_sizes',None)
         if self.node_sizes is None or np.size(self.node_sizes)!=self.depth+1:
             self.node_sizes = np.linspace(self.input_dim,self.output_dim,self.depth+1,dtype=np.int)
         if self.node_sizes[0]!=self.input_dim or self.node_sizes[-1]!=self.output_dim:
             raise ValueError('Node sizes not matching input/output dimensions!')
         self.droprate = kwargs.pop('droprate',0)
-        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
+        self.activations = kwargs.pop('activations',{'hidden':'relu','output':'linear'})
+        self.kernel_initializers=kwargs.pop('kernel_initializers',{'hidden':'glorot_uniform','output':'glorot_uniform'})
         # build neural network
         self.build(**kwargs)
-    
-#     def _set_layers(self, model):
-#         """
-#         Set network layers
-#         """
-#         for i in range(self.depth):
-#             layer_name = 'out' if i==self.depth-1 else 'hidden_layer{}'.format(i)
-#             if callable(self.activation):
-#                 model.add(Dense(units=self.node_sizes[i+1], kernel_initializer=self.kernel_initializer, name=layer_name))
-#                 model.add(self.activation)
-#             else:
-#                 model.add(Dense(units=self.node_sizes[i+1], activation=self.activation, kernel_initializer=self.kernel_initializer, name=layer_name))
-#             if self.droprate:
-#                 model.add(Dropout(rate=self.droprate))
-#         return model
     
     def _set_layers(self, input):
         """
@@ -70,13 +55,16 @@ class DNN:
         """
         output=input
         for i in range(self.depth):
-            layer_name = 'out' if i==self.depth-1 else 'hidden_layer{}'.format(i)
-            ker_ini = self.kernel_initializer(output.shape[1]*30**(i==0)) if callable(self.kernel_initializer) else self.kernel_initializer
-            if callable(self.activation):
+            layer_name = 'output' if i==self.depth-1 else 'hidden_layer{}'.format(i)
+            activation = self.activations['output'] if i==self.depth-1 else self.activations['hidden']
+            ker_ini_hidden = self.kernel_initializers['hidden'](output.shape[1]*30**(i==0)) if callable(self.kernel_initializers['hidden']) else self.kernel_initializers['hidden']
+            ker_ini_output = self.kernel_initializers['output'](output.shape[1]) if callable(self.kernel_initializers['output']) else self.kernel_initializers['output']
+            ker_ini = ker_ini_output if i==self.depth-1 else ker_ini_hidden
+            if callable(activation):
                 output=Dense(units=self.node_sizes[i+1], kernel_initializer=ker_ini, name=layer_name)(output)
-                output=self.activation(output)
+                output=activation(output)
             else:
-                output=Dense(units=self.node_sizes[i+1], activation=self.activation, kernel_initializer=ker_ini, name=layer_name)(output)
+                output=Dense(units=self.node_sizes[i+1], activation=activation, kernel_initializer=ker_ini, name=layer_name)(output)
             output=Dropout(rate=self.droprate)(output, training=self.droprate>0)
         return output
     
@@ -87,7 +75,7 @@ class DNN:
         def loss(y_true, y_pred):
 #             L=tf.keras.losses.MSE(y_true, y_pred)
             L=loss_f(y_true,y_pred)[0] # diff in potential
-            L+=tf.math.reduce_sum(tf.math.reduce_sum(self.batch_jacobian()*loss_f(y_true,y_pred)[1][:,:,None],axis=1)**2,axis=1) # diff in gradient potential
+#             L+=tf.math.reduce_sum(tf.math.reduce_sum(self.batch_jacobian()*loss_f(y_true,y_pred)[1][:,:,None],axis=1)**2,axis=1) # diff in gradient potential
             return L
         return loss
     
@@ -97,9 +85,7 @@ class DNN:
         """
         # initialize model
         input = Input(shape=self.input_dim, name='input')
-#         model = Sequential([input])
         # set model layers
-#         self.model = self._set_layers(model)
         output = self._set_layers(input)
         self.model = Model(input, output, name='dnn')
         # compile model
@@ -220,12 +206,16 @@ if __name__ == '__main__':
     depth=2
     # activation='linear'
     activation=tf.keras.layers.LeakyReLU(alpha=0.1)
+#     activations={'hidden':tf.math.sin,'output':'linear'}
     droprate=.5
+    sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+    kernel_initializers={'hidden':sin_init,'output':'glorot_uniform'}
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth,
-            activation=activation, droprate=droprate, optimizer=optimizer)
+    dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
+            activation=activation, kernel_initializers=kernel_initializers, optimizer=optimizer)
     try:
         dnn.model=load_model('./result/dnn_'+algs[alg_no]+'.h5')
+#         dnn.model.load_weights('./result/dnn_'+algs[alg_no]+'.h5')
         print('dnn_'+algs[alg_no]+'.h5'+' has been loaded!')
     except Exception as err:
         print(err)
@@ -239,9 +229,7 @@ if __name__ == '__main__':
         # save DNN
 #         dnn.model.save('./result/dnn_model.h5')
         dnn.save('./result','dnn_'+algs[alg_no])
-        # how to laod model
-#         from tensorflow.keras.models import load_model
-#         reconstructed_model=load_model('XX_model.h5')
+#         dnn.model.save_weights('./result/dnn_'+algs[alg_no]+'.h5')
     
     # some more test
     loglik = lambda x: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((dnn.model(x)-elliptic.misfit.obs)**2,axis=1)

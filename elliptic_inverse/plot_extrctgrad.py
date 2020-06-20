@@ -47,20 +47,24 @@ x_test,y_test=X[n_tr:],Y[n_tr:]
 num_filters=[16,8]
 activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
 # activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
+# activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear'}
 latent_dim=128
 droprate=.5
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+# sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+# kernel_initializers={'conv':sin_init,'latent':sin_init,'output':'glorot_uniform'}
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
+cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
+        activations=activations, optimizer=optimizer)
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
-cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
-        activations=activations, droprate=droprate, optimizer=optimizer, padding='same')
-# cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim,
-#         activations=activations, droprate=droprate, optimizer=optimizer, loss=custom_loss)
+# cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
+#         activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
-f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'
+f_name='cnn_'+algs[alg_no]+str(ensbl_sz)
 try:
-    cnn.model=load_model(os.path.join(folder,f_name),custom_objects={'loss':None})
+#     cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
+    nn.model.load_weights(os.path.join(folder,f_name+'.h5'))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
@@ -73,8 +77,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training CNN: {}'.format(t_used))
     # save CNN
-    cnn.model.save(os.path.join(folder,f_name))
+#     cnn.model.save(os.path.join(folder,f_name+'.h5'))
 #     cnn.save(folder,'cnn_'+algs[alg_no]+str(ensbl_sz))
+    cnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
 
 
 # read data and construct plot functions

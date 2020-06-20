@@ -78,13 +78,13 @@ cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=laten
 # cae=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
 #                     activations=activations, optimizer=optimizer, loss=nlpost, run_eagerly=True)
 # folder=folder+'/saved_model'
-f_name=['cae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
+f_name=['cae_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
 try:
-    cae.model=load_model(os.path.join(folder,f_name[0]),custom_objects={'loss':None})
+    cae.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')
-    cae.encoder=load_model(os.path.join(folder,f_name[1]),custom_objects={'loss':None})
+    cae.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
     print(f_name[1]+' has been loaded!')
-    cae.decoder=load_model(os.path.join(folder,f_name[2]),custom_objects={'loss':None})
+    cae.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
     print(f_name[2]+' has been loaded!')
 except Exception as err:
     print(err)
@@ -97,9 +97,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training CAE: {}'.format(t_used))
     # save AE
-    cae.model.save(os.path.join(folder,f_name[0]))
-    cae.encoder.save(os.path.join(folder,f_name[1]))
-    cae.decoder.save(os.path.join(folder,f_name[2]))
+    cae.model.save(os.path.join(folder,f_name[0]+'.h5'))
+    cae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
+    cae.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
 # # plot
 # import matplotlib.pyplot as plt

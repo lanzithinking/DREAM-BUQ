@@ -31,20 +31,21 @@ class AutoEncoder:
         dim: dimension of the original (input and output) space
         half_depth: the depth of the network of encoder and decoder if a symmetric structure is imposed (by default)
         latent_dim: the dimension of the latent space
-        activation: specification of activation functions, can be a string or a Keras activation layer
         node_sizes: sizes of the nodes of the network, which can overwrite half_depth and induce an asymmetric structure.
+        activation: specification of activation functions, can be a string or a Keras activation layer
+        kernel_initializer: kernel_initializer corresponding to activation
         """
         self.dim = dim
         self.half_depth = half_depth
         self.latent_dim = latent_dim
         if self.latent_dim is None: self.latent_dim = np.ceil(self.dim/self.half_depth).astype('int')
-        self.activation = kwargs.pop('activation','linear')
         self.node_sizes = kwargs.pop('node_sizes',None)
         if self.node_sizes is None or np.size(self.node_sizes)!=2*self.half_depth+1:
             self.node_sizes = np.linspace(self.dim,self.latent_dim,self.half_depth+1,dtype=np.int)
             self.node_sizes = np.concatenate((self.node_sizes,self.node_sizes[-2::-1]))
         if not np.all([self.node_sizes[i]==self.dim for i in (0,-1)]):
             raise ValueError('End node sizes not matching input/output dimensions!')
+        self.activation = kwargs.pop('activation','linear')
         self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)

@@ -31,25 +31,26 @@ class ConvAutoEncoder:
         im_shape: image shape (im_sz, chnl) both input and output
         num_filters: list of filter sizes of Conv2D
         half_depth: the depth of the network of encoder and decoder respectively
+        latent_dim: the dimension of the latent space
         kernel_size: kernel size of Conv2D
         pool_size: pool size of MaxPooling2D
         strides: strides of Conv2D/MaxPooling2D
-        latent_dim: the dimension of the latent space
-        activations: specification of activation functions, can be a list of strings or Keras activation layers
         padding: padding of Conv2D/MaxPooling2D
+        activations: specification of activation functions, can be a list of strings or Keras activation layers
+        kernel_initializer: kernel_initializer
         """
         self.im_shape = im_shape
         assert all([i %2==0 for i in self.im_shape[:2]]), 'Must have even image size!'
         self.num_filters = num_filters
         self.half_depth = len(self.num_filters)
+        self.latent_dim = latent_dim
+        if self.latent_dim is None: self.latent_dim = np.ceil(np.prod(self.im_shape)/self.half_depth).astype('int')
         self.kernel_size = kernel_size
         self.pool_size = pool_size
         self.strides = strides
-        self.latent_dim = latent_dim
-        if self.latent_dim is None: self.latent_dim = np.ceil(np.prod(self.im_shape)/self.half_depth).astype('int')
-        self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear'})
         self.padding = kwargs.pop('padding','same')
         assert self.padding=='same', 'Padding has to set as "same"!'
+        self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear'})
         self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)

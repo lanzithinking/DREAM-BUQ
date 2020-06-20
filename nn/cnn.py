@@ -10,15 +10,14 @@ Created June 4, 2020
 __author__ = "Shiwei Lan; Shuyi Li"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense
-from tensorflow.keras.models import Sequential
-# from tensorflow.keras.models import Model
+from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
 
@@ -34,10 +33,11 @@ class CNN:
         kernel_size: kernel size of Conv2D
         pool_size: pool size of MaxPooling2D
         strides: strides of Conv2D/MaxPooling2D
-        activations: specification of activation functions, can be a list of strings or Keras activation layers
-        latent_dim: the dimension of the latent space
         padding: padding of Conv2D/MaxPooling2D
+        latent_dim: the dimension of the latent space
         droprate: the rate of Dropout
+        activations: specification of activation functions, can be a list of strings or Keras activation layers
+        kernel_initializers: kernel_initializers corresponding to activations
         """
         self.input_shape=input_shape
         self.output_dim=output_dim
@@ -46,52 +46,36 @@ class CNN:
         self.kernel_size = kernel_size
         self.pool_size = pool_size
         self.strides = strides
-        self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear','output':'softmax'})
-        self.latent_dim = kwargs.pop('latent_dim',self.input_shape[0]+self.output_dim)
         self.padding = kwargs.pop('padding','same')
+        self.latent_dim = kwargs.pop('latent_dim',self.input_shape[0]+self.output_dim)
         self.droprate = kwargs.pop('droprate',0)
-        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
+        self.activations = kwargs.pop('activations',{'conv':'relu','latent':'linear','output':'softmax'})
+        self.kernel_initializers=kwargs.pop('kernel_initializers',{'conv':'glorot_uniform','latent':'glorot_uniform','output':'glorot_uniform'})
         # build neural network
         self.build(**kwargs)
     
-    def _set_layers(self, model):
+    def _set_layers(self, input):
         """
         Set network layers
         """
+        output=input
         for i in range(self.conv_depth):
-            model.add(Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
-                             activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='conv_layer{}'.format(i)))
-            model.add(MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i)))
-        model.add(Flatten())
+            ker_ini = self.kernel_initializers['conv'](output.shape[1]*30**(i==0)) if callable(self.kernel_initializers['conv']) else self.kernel_initializers['conv']
+            output=Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
+                          activation=self.activations['conv'], kernel_initializer=ker_ini, name='conv_layer{}'.format(i))(output)
+            output=MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i))(output)
+        output=Flatten()(output)
+        ker_ini = self.kernel_initializers['latent'](output.shape[1]) if callable(self.kernel_initializers['latent']) else self.kernel_initializers['latent']
         if callable(self.activations['latent']):
-            model.add(Dense(units=self.latent_dim, kernel_initializer=self.kernel_initializer, name='latent'))
-            model.add(self.activations['latent'])
+            output=Dense(units=self.latent_dim, kernel_initializer=ker_ini, name='latent')(output)
+            output=self.activations['latent'](output)
         else:
-            model.add(Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='latent'))
+            output=Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=ker_ini, name='latent')(output)
         if self.droprate:
-            model.add(Dropout(rate=self.droprate))
-        model.add(Dense(units=self.output_dim, activation=self.activations['output'], kernel_initializer=self.kernel_initializer ,name='output'))
-        return model
-    
-#     def _set_layers(self, input):
-#         """
-#         Set network layers
-#         """
-#         output=input
-#         for i in range(self.conv_depth):
-#             output=Conv2D(filters=self.num_filters[i], kernel_size=self.kernel_size, strides=self.strides, 
-#                           activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='conv_layer{}'.format(i))(output)
-#             output=MaxPooling2D(pool_size=self.pool_size, padding=self.padding,name='pool_layer{}'.format(i))(output)
-#         output=Flatten()(output)
-#         if callable(self.activations['latent']):
-#             output=Dense(units=self.latent_dim, kernel_initializer=self.kernel_initializer, name='latent')(output)
-#             output=self.activations['latent'](output)
-#         else:
-#             output=Dense(units=self.latent_dim, activation=self.activations['latent'], kernel_initializer=self.kernel_initializer, name='latent')(output)
-#         if self.droprate:
-#             output=Dropout(rate=self.droprate)(output)
-#         output=Dense(units=self.output_dim, activation=self.activations['output'], kernel_initializer=self.kernel_initializer, name='output')(output)
-#         return output
+            output=Dropout(rate=self.droprate)(output)
+        ker_ini = self.kernel_initializers['output'](output.shape[1]) if callable(self.kernel_initializers['output']) else self.kernel_initializers['output']
+        output=Dense(units=self.output_dim, activation=self.activations['output'], kernel_initializer=ker_ini, name='output')(output)
+        return output
     
     def _custom_loss(self,loss_f):
         """
@@ -110,11 +94,9 @@ class CNN:
         """
         # initialize model
         input = Input(shape=self.input_shape, name='image_input')
-        model = Sequential([input])
         # set model layers
-        self.model = self._set_layers(model)
-#         output = self._set_layers(input)
-#         self.model = Model(input, output, name='cnn')
+        output = self._set_layers(input)
+        self.model = Model(input, output, name='cnn')
         # compile model
         optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
@@ -234,13 +216,17 @@ if __name__ == '__main__':
     # define CNN
     num_filters=[16,32]
     activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
+#     activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear'}
     latent_dim=128
     droprate=.25
+    sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+    kernel_initializers={'conv':sin_init,'latent':sin_init,'output':'glorot_uniform'}
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,
-            latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
+    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,latent_dim=latent_dim, droprate=droprate,
+            activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
     try:
-        cnn.model=load_model('./result/cnn_'+algs[alg_no]+'.h5')
+#         cnn.model=load_model('./result/cnn_'+algs[alg_no]+'.h5')
+        cnn.model.load_weights('./result/cnn_'+algs[alg_no]+'.h5')
         print('cnn_'+algs[alg_no]+'.h5'+' has been loaded!')
     except Exception as err:
         print(err)
@@ -253,10 +239,8 @@ if __name__ == '__main__':
         print('\nTime used for training CNN: {}'.format(t_used))
         # save CNN
 #         cnn.model.save('./result/cnn_model.h5')
-        cnn.save('./result','cnn_'+algs[alg_no])
-        # how to laod model
-#         from tensorflow.keras.models import load_model
-#         reconstructed_model=load_model('XX_model.h5')
+#         cnn.save('./result','cnn_'+algs[alg_no])
+        cnn.model.save_weights('./result','cnn_'+algs[alg_no]+'.h5')
     
     # some more test
     loglik = lambda x: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((cnn.model(x)-elliptic.misfit.obs)**2,axis=1)

@@ -9,7 +9,7 @@ import sys,os
 sys.path.append( "../" )
 from Elliptic import Elliptic
 # from util.dolfin_gadget import vec2fun,fun2img,img2fun
-from nn.autoencoder import AutoEncoder
+from nn.ae import AutoEncoder
 from tensorflow.keras.models import load_model
 
 # set random seed
@@ -58,13 +58,13 @@ ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 # ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 #                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
 # folder=folder+'/saved_model'
-f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'_customloss.h5' for i in ('fullmodel','encoder','decoder')]
+f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'_customloss' for i in ('fullmodel','encoder','decoder')]
 try:
-    ae.model=load_model(os.path.join(folder,f_name[0]),custom_objects={'loss':None})
+    ae.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')
-    ae.encoder=load_model(os.path.join(folder,f_name[1]),custom_objects={'loss':None})
+    ae.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
     print(f_name[1]+' has been loaded!')
-    ae.decoder=load_model(os.path.join(folder,f_name[2]),custom_objects={'loss':None})
+    ae.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
     print(f_name[2]+' has been loaded!')
 except Exception as err:
     print(err)
@@ -77,9 +77,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AE: {}'.format(t_used))
     # save AE
-    ae.model.save(os.path.join(folder,f_name[0]))
-    ae.encoder.save(os.path.join(folder,f_name[1]))
-    ae.decoder.save(os.path.join(folder,f_name[2]))
+    ae.model.save(os.path.join(folder,f_name[0]+'.h5'))
+    ae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
+    ae.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
 # plot
 import matplotlib.pyplot as plt
@@ -116,4 +116,47 @@ for n in range(20):
     plt.title('Reconstructed Sample')
     plt.draw()
     plt.pause(1.0/10.0)
-    
+
+
+# read data and construct plot functions
+u_f = df.Function(elliptic.pde.V)
+u_f_lat = df.Function(elliptic_latent.pde.V)
+# read MAP
+try:
+    f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
+    f.read(u_f,"parameter")
+    f.close()
+except:
+    pass
+u=u_f.vector()
+# encode
+u_encoded=ae.encode(u.get_local()[None,:])
+# decode
+u_decoded=ae.decode(u_encoded)
+
+# plot
+plt.rcParams['image.cmap'] = 'jet'
+fig,axes = plt.subplots(nrows=1,ncols=3,sharex=True,sharey=True,figsize=(15,5))
+sub_figs=[None]*3
+# plot
+plt.axes(axes.flat[0])
+# u_f.vector().set_local(u)
+sub_figs[0]=df.plot(u_f)
+plt.title('Original')
+plt.axes(axes.flat[1])
+u_f_lat.vector().set_local(u_encoded.flatten())
+sub_figs[1]=df.plot(u_f_lat)
+plt.title('Latent')
+plt.axes(axes.flat[2])
+u_f.vector().set_local(u_decoded.flatten())
+sub_figs[2]=df.plot(u_f)
+plt.title('Reconstructed')
+
+# add common colorbar
+from util.common_colorbar import common_colorbar
+fig=common_colorbar(fig,axes,sub_figs)
+
+# save plots
+# fig.tight_layout(h_pad=1)
+plt.savefig(os.path.join(folder,'latent_reconstructed.png'),bbox_inches='tight')
+# plt.show()

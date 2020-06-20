@@ -46,24 +46,25 @@ x_test,y_test=X[n_tr:],Y[n_tr:]
 depth=3
 # activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.1)
-# activation=tf.keras.layers.Lambda(tf.math.sin)
-activation=tf.math.sin
+activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.1),'output':'linear'}
+# activations={'hidden':tf.math.sin,'output':tf.keras.layers.LeakyReLU(alpha=0.1)}
 droprate=.4
-kernel_initializer=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+# sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+# kernel_initializers={'hidden':sin_init,'output':'glorot_uniform'}
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth,
-        activation=activation, droprate=droprate, kernel_initializer=kernel_initializer, optimizer=optimizer)
+dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
+        activations=activations, optimizer=optimizer)
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
-# dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth,
-#         activation=activation, droprate=droprate, kernel_initializer=kernel_initializer, optimizer=optimizer, loss=custom_loss)
+# dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
+#         activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer, loss=custom_loss)
 # folder=folder+'/saved_model'
-f_name='dnn_'+algs[alg_no]+str(ensbl_sz)+'customloss.h5'
+f_name='dnn_'+algs[alg_no]+str(ensbl_sz)#+'_customloss'
 try:
-#     dnn.model=load_model(os.path.join(folder,f_name))
-#     dnn.model=load_model(os.path.join(folder,f_name),custom_objects={'loss':None})
-    dnn.model=load_weights(os.path.join(folder,f_name))
+#     dnn.model=load_model(os.path.join(folder,f_name+'.h5'))
+#     dnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
+    dnn.model.load_weights(os.path.join(folder,f_name+'.h5'))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
@@ -76,9 +77,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training DNN: {}'.format(t_used))
     # save DNN
-#     dnn.model.save(os.path.join(folder,f_name))
-#     dnn.save(folder,'dnn_'+algs[alg_no]+str(ensbl_sz))
-    dnn.model.save_weights(os.path.join(folder,f_name))
+#     dnn.model.save(os.path.join(folder,f_name+'.h5'))
+#     dnn.save(folder,'dnn_'+algs[alg_no]+str(ensbl_sz)) # fails due to the custom kernel_initializer
+    dnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
 
 # some more test
 logLik = lambda x: loglik(dnn.model(x))
@@ -105,7 +106,7 @@ for n in range(20):
     
     # check the gradient extracted from emulation
     v=elliptic.prior.sample()
-    h=1e-4
+    h=1e-3
     dll_emul_fd_v=(logLik(u.get_local()[None,:]+h*v.get_local()[None,:])-logLik(u.get_local()[None,:]))/h
     reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v.get_local()))/v.norm('l2')
     print('Relative difference between finite difference and extracted results: {}'.format(reldif))
@@ -163,5 +164,5 @@ fig=common_colorbar(fig,axes,sub_figs)
  
 # save plots
 # fig.tight_layout(h_pad=1)
-plt.savefig(os.path.join(folder,'extrctgrad_dnn.png'),bbox_inches='tight')
+plt.savefig(os.path.join(folder,f_name+'.png'),bbox_inches='tight')
 # plt.show()

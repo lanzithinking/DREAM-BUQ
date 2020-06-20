@@ -9,7 +9,7 @@ import sys,os
 sys.path.append( "../" )
 from Elliptic import Elliptic
 # from util.dolfin_gadget import vec2fun,fun2img,img2fun
-from nn.autoencoder import AutoEncoder
+from nn.ae import AutoEncoder
 from tensorflow.keras.models import load_model
 
 # set random seed
@@ -57,14 +57,14 @@ ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                activation=activation, optimizer=optimizer)
 # ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 #                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
-f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
+f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
 # folder=folder+'/saved_model'
 try:
-    ae.model=load_model(os.path.join(folder,f_name[0]),custom_objects={'loss':None})
+    ae.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')
-    ae.encoder=load_model(os.path.join(folder,f_name[1]),custom_objects={'loss':None})
+    ae.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
     print(f_name[1]+' has been loaded!')
-    ae.decoder=load_model(os.path.join(folder,f_name[2]),custom_objects={'loss':None})
+    ae.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
     print(f_name[2]+' has been loaded!')
 except Exception as err:
     print(err)
@@ -76,9 +76,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AE: {}'.format(t_used))
     # save AE
-    ae.model.save(os.path.join(folder,f_name[0]))
-    ae.encoder.save(os.path.join(folder,f_name[1]))
-    ae.decoder.save(os.path.join(folder,f_name[2]))
+    ae.model.save(os.path.join(folder,f_name[0]+'.h5'))
+    ae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
+    ae.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
 # read data and construct plot functions
 u_f = df.Function(elliptic.pde.V)
