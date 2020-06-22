@@ -29,8 +29,8 @@ def main():
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,2.,1.3,6.,4.]) # SNR10: [.5,2,1.3,6.,4.];SNR100: [.01,.04,0.04,.52,.25]
-    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,4,1,4,1,4])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.06,.2,.2,.4,.4]) # SNR10: [.5,2,1.3,6.,4.];SNR100: [.01,.04,0.04,.52,.25]
+    parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['e_'+n for n in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     args = parser.parse_args()
 
@@ -50,9 +50,9 @@ def main():
     
     # define the emulator (CNN)
     # load data
-    ensbl_sz = 100
+    ensbl_sz = 500
     folder = './analysis_f_SNR'+str(SNR)
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
     X=loaded['X']
     Y=loaded['Y']
     # pre-processing: scale X to 0-1
@@ -66,15 +66,15 @@ def main():
     x_test,y_test=X[n_tr:],Y[n_tr:]
     
     # define CNN
-    num_filters=[16,32]
+    num_filters=[16,8]
     activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
     latent_dim=128
-    droprate=.25
+    droprate=.5
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters,
-            latent_dim=latent_dim, activations=activations, droprate=droprate, optimizer=optimizer)
+    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
+            activations=activations, optimizer=optimizer)
     try:
-        cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+'.h5'))
+        cnn.model=load_model(os.path.join(folder,'cnn_'+algs[alg_no]+str(ensbl_sz)+'.h5'))
         print('cnn_'+algs[alg_no]+'.h5'+' has been loaded!')
     except Exception as err:
         print(err)
@@ -87,7 +87,7 @@ def main():
         print('\nTime used for training CNN: {}'.format(t_used))
         # save CNN
 #         cnn.model.save('./result/cnn_model.h5')
-        cnn.save(folder,'cnn_'+algs[alg_no])
+        cnn.save(folder,'cnn_'+algs[alg_no]+str(ensbl_sz))
     
     # initialization
 #     unknown=elliptic.prior.sample(whiten=False)
@@ -99,8 +99,8 @@ def main():
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
     from geom_emul import geom
-    emul_geom=lambda q,geom_ord=[0],whitened=False:geom(q,elliptic,cnn,geom_ord,whitened)
-    e_infGMC=einfGMC(unknown,elliptic,emul_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False)
+    emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic,cnn,geom_ord,whitened,**kwargs)
+    e_infGMC=einfGMC(unknown,elliptic,emul_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],k=5,volcrK=False)
     mc_fun=e_infGMC.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)

@@ -38,11 +38,12 @@ class einfGMC:
         self.model=model
         
         target_acpt=kwargs.pop('target_acpt',0.65)
+        self.volcrK=kwargs.pop('volcrK',False)
         # geometry needed
         geom_ord=[0]
         if any(s in alg_name for s in ['MALA','HMC']): geom_ord.append(1)
         if any(s in alg_name for s in ['mMALA','mHMC']): geom_ord.append(2)
-        self.geom=lambda parameter: emul_geom(parameter,geom_ord=geom_ord)
+        self.geom=lambda parameter: emul_geom(parameter,geom_ord=geom_ord,**kwargs)
         self.ll,self.g,_,self.eigs=self.geom(self.q)
 #         self.ll,self.g,_,self.eigs=self.model.get_geom(self.q,geom_ord,**kwargs)
 
@@ -51,7 +52,6 @@ class einfGMC:
         self.L=step_num
         if 'HMC' not in alg_name: self.L=1
         self.alg_name = alg_name
-        self.volcrK=kwargs.pop('volcrK',False)
 
         # optional setting for adapting step size
         self.adpt_h=adpt_h
@@ -225,7 +225,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmMALA(self):
+    def e_DRinfmMALA(self):
         """
         dimension-reduced infinite dimensional manifold MALA
         """
@@ -278,7 +278,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmHMC(self):
+    def e_DRinfmHMC(self):
         """
         dimension-reduced infinite dimensional manifold HMC
         """

@@ -9,6 +9,7 @@ import sys,os
 sys.path.append( "../" )
 from Elliptic import Elliptic
 from util.dolfin_gadget import vec2fun,fun2img,img2fun
+from util.multivector import *
 from nn.cnn import CNN
 from tensorflow.keras.models import load_model
 
@@ -92,6 +93,7 @@ plt.ion()
 u_f = df.Function(elliptic.pde.V)
 for n in range(20):
     u=elliptic.prior.sample()
+    
     # calculate gradient
     t_start=timeit.default_timer()
     dll_xact = elliptic.get_geom(u,[0,1])[1]
@@ -105,13 +107,39 @@ for n in range(20):
     dif = dll_xact - img2fun(dll_emul,elliptic.pde.V).vector()
     print('Difference between the calculated and emulated gradients: min ({}), med ({}), max ({})'.format(dif.min(),np.median(dif.get_local()),dif.max()))
     
-    # check the gradient extracted from emulation
+    # check the gradient extracted from emulation with finite difference
     v=elliptic.prior.sample()
     v_img=fun2img(vec2fun(v,elliptic.pde.V))
     h=1e-4
     dll_emul_fd_v=(logLik(u_img[None,:,:,None]+h*v_img[None,:,:,None])-logLik(u_img[None,:,:,None]))/h
     reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v_img.flatten()))/v.norm('l2')
     print('Relative difference between finite difference and extracted results: {}'.format(reldif))
+    
+    # calculate metact
+    t_start=timeit.default_timer()
+    metact_xact = elliptic.get_geom(u,[0,1,1.5])[2]
+    metactv_xact = metact_xact(v)
+    t_used[0] += timeit.default_timer()-t_start
+    # emulate GNH
+    t_start=timeit.default_timer()
+    jac_img = cnn.jacobian(u_img[None,:,:,None])
+    n_obs = len(elliptic.misfit.idx)
+    jac = MultiVector(u,n_obs)
+#     [jac[i].set_local(img2fun(jac_img[i], elliptic.pde.V).vector()) for i in range(n_obs)]
+    for i in range(n_obs): jac[i][:] = img2fun(jac_img[i], elliptic.pde.V).vector()
+    metactv_emul = elliptic.prior.gen_vector()
+    jac.reduce(metactv_emul, elliptic.misfit.prec*jac.dot(v))
+    metactv_emul = elliptic.prior.M*metactv_emul
+    t_used[1] += timeit.default_timer()-t_start
+    # test difference
+    dif = metactv_xact - metactv_emul
+    print('Difference between the calculated and emulated metric-action: min ({}), med ({}), max ({})'.format(dif.min(),np.median(dif.get_local()),dif.max()))
+    
+    # check the extracted gradient using extracted jacobian
+    dll_emul_jac = elliptic.prior.gen_vector()
+    jac.reduce(dll_emul_jac, elliptic.misfit.prec*(elliptic.misfit.obs-cnn.model.predict(u_img[None,:,:,None])) )
+    norm_dif = (img2fun(dll_emul,elliptic.pde.V).vector()-dll_emul_jac).norm('linf')
+    print('Max-norm of difference between extracted gradient and that calculated with extracted jacobian: {}\n'.format(norm_dif))
     
     # plot
     plt.subplot(121)
