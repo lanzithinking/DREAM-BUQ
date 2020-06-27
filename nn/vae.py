@@ -86,8 +86,8 @@ class VAE:
         if custom_loss is None: custom_loss=self._nll_loss
         def loss(y_true, y_pred):
             L=beta*self._KL_loss(y_true)
-#             L+=custom_loss(y_true,y_pred)
-            L+=custom_loss(self.reparametrize(self.encoder(y_true)))
+            L+=custom_loss(y_true,y_pred)
+#             L+=custom_loss(self.reparametrize(self.encoder(y_true)))
             return L
         return loss
     
