@@ -1,69 +1,55 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jun 22 21:21:25 2020
-
-@author: apple
-"""
-
 #!/usr/bin/env python
 """
-AutoEncoder
+Variational AutoEncoder
 Shiwei Lan @ASU, 2020
 --------------------------------------
 Standard AutoEncoder in TensorFlow 2.2
 --------------------
-Created June 4, 2020
+Created June 23, 2020
 """
-__author__ = "Shiwei Lan"
+__author__ = "Shiwei Lan; Shuyi Li"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.1"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
-#import tensorflow.compat.v1 as tfv1 
 from tensorflow.keras.layers import Input,Dense
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
-#print(tf.executing_eagerly())
-#K.clear_session()
-#tf.compat.v1.reset_default_graph()
-#tfv1.disable_v2_behavior()
-#tf.enable_eager_execution()
-#tf.config.experimental_run_functions_eagerly(True)
-#tf.compat.v1.disable_eager_execution()
-class VariationalAE:
-    def __init__(self, dim, half_depth=3, latent_dim=None, hidden_dim=None,**kwargs):
+
+
+class VAE:
+    def __init__(self, dim, half_depth=3, latent_dim=None, **kwargs):
         """
-        AutoEncoder with encoder that maps inputs to latent variables and decoder that reconstructs data from latent variables.
-        Heuristic structure: inputs --(encoder)-- latent variables --(decoder)-- reconstructions.
-        -----------------------------------------------------------------------------------------
+        Variational AutoEncoder with encoder that maps inputs to latent variables and decoder that reconstructs data from latent variables.
+        Heuristic structure: inputs x --(encoder)-- latent variables z --(decoder)-- reconstructions x'.
+        z = mu(x) + sigma(x) * eps, where mu and sigma are output of latent layer (encoded), eps ~ N(0,I)
+        -------------------------------------------------------------------------------------------------
         dim: dimension of the original (input and output) space
         half_depth: the depth of the network of encoder and decoder if a symmetric structure is imposed (by default)
         latent_dim: the dimension of the latent space
-        hidden_dim: the dimension of the hidden space, from dim->latent_dim
-        activation: specification of activation functions, can be a string or a Keras activation layer
         node_sizes: sizes of the nodes of the network, which can overwrite half_depth and induce an asymmetric structure.
+        repatr_out: indicator whether to reparametrize output such that x' = mu'(z) + sigma'(z) * eps
+        activation: specification of activation functions, can be a string or a Keras activation layer
+        kernel_initializer: kernel_initializer corresponding to activation
         """
         self.dim = dim
         self.half_depth = half_depth
         self.latent_dim = latent_dim
-        self.hidden_dim = hidden_dim
         if self.latent_dim is None: self.latent_dim = np.ceil(self.dim/self.half_depth).astype('int')
-        self.activation = kwargs.pop('activation',{'hidden':'relu','latent':'linear','decode':'sigmoid'})
         self.node_sizes = kwargs.pop('node_sizes',None)
         if self.node_sizes is None or np.size(self.node_sizes)!=2*self.half_depth+1:
-            #self.node_sizes = np.linspace(self.dim,self.latent_dim,self.half_depth+1,dtype=np.int)
-            self.node_sizes = np.concatenate((np.array([self.dim]),np.array([self.hidden_dim]*(half_depth-1)),
-                                              np.array([self.latent_dim*2])))
+            self.node_sizes = np.linspace(self.dim,self.latent_dim,self.half_depth+1,dtype=np.int)
             self.node_sizes = np.concatenate((self.node_sizes,self.node_sizes[-2::-1]))
         if not np.all([self.node_sizes[i]==self.dim for i in (0,-1)]):
             raise ValueError('End node sizes not matching input/output dimensions!')
+        self.repatr_out = kwargs.pop('repatr_out',False)
+        self.activation = kwargs.pop('activation','linear')
+        self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
         self.build(**kwargs)
     
@@ -74,28 +60,70 @@ class VariationalAE:
         node_sizes = {'encode':self.node_sizes[:self.half_depth+1],'decode':self.node_sizes[self.half_depth:]}[coding]
         output = input
         for i in range(self.half_depth):
+            node_sz = node_sizes[i+1]*2**((i==self.half_depth-1)*{'encode':True,'decode':self.repatr_out}[coding])
             layer_name = "{}_out".format(coding) if i==self.half_depth-1 else "{}_layer{}".format(coding,i)
             if callable(self.activation):
-                output = Dense(units=node_sizes[i+1], name=layer_name)(output)
-                if i != self.half_depth-1:
-                    output = self.activation['hidden'](output)  
-                elif coding=='encode':
-                    output = self.activation['latent'](output)
-                else:
-                    output = self.activation['decode'](output)
+                output = Dense(units=node_sz, kernel_initializer=self.kernel_initializer, name=layer_name)(output)
+                output = self.activation(output)
             else:
-                if i != self.half_depth-1:
-                    output = Dense(units=node_sizes[i+1], activation=self.activation['hidden'], name=layer_name)(output)
-                elif coding=='encode':
-                    output = Dense(units=node_sizes[i+1], activation=self.activation['latent'], name=layer_name)(output)
-                else:
-                    output = Dense(units=node_sizes[i+1], activation=self.activation['decode'], name=layer_name)(output)
-              
+                output = Dense(units=node_sz, activation=self.activation, kernel_initializer=self.kernel_initializer, name=layer_name)(output)
         return output
     
-    def reparameterize(self, mean, logvar):
-        eps = tf.random.normal(shape=[self.latent_dim])
-        return eps * tf.exp(logvar * .5) + mean 
+    def reparametrize(self, input, dim=None):
+        """
+        Reparametrize (latent variable) z ~ N(mu(x), sigma^2(x))
+        """
+        if dim is None: dim = self.latent_dim
+        mean, std = tf.split(input, 2, axis=1)
+        eps = tf.random.normal(shape=[dim])
+        output = mean + std * eps
+        return output
+    
+    def _loss(self, beta=1, custom_loss=None):
+        """
+        Wrapper to customize loss function (on latent space)
+        """
+        if custom_loss is None: custom_loss=self._nll_loss
+        def loss(y_true, y_pred):
+            L=beta*self._KL_loss(y_true)
+#             L+=custom_loss(y_true,y_pred)
+            L+=custom_loss(self.reparametrize(self.encoder(y_true)))
+            return L
+        return loss
+    
+    def _KL_loss(self, input=None):
+        """
+        Kullback–Leibler between q(z|x) and p(z), regularization
+        """
+        if input is None: input = self.model.input
+        mean, std = tf.split(self.encoder(input), 2, axis=1)
+        KL = 0.5*tf.reduce_sum(mean**2 + std**2 - 2*tf.math.log(tf.math.abs(std)) - 1, axis=1)
+        return KL
+    
+    def _nll_loss(self, *args, **kwargs):
+        """
+        Expectation of negative Log-likelihood -log p(x|z) wrt q(z|x)
+        """
+        if not self.repatr_out:
+            return .5*tf.keras.losses.MSE(*args, **kwargs)
+        else:
+            if len(args)==2:
+                input, output = args[0], args[1]
+            elif len(args)==1:
+                input = args
+                output = kwargs.pop('output',self.model.output)
+            else:
+                input = kwargs.pop('input',self.model.input)
+                output = kwargs.pop('output',self.model.output)
+            latent = self.reparametrize(self.encoder(input))
+            mean, std = tf.split(self.decoder(latent), 2, axis=1)
+            norm_dec = tf.compat.v1.distributions.Normal(mean, tf.math.abs(std))
+#             norm_dec = tfp.distributions.Normal(mean, tf.math.abs(std))
+#             nll = -tf.reduce_sum(norm_dec.log_prob(output),axis=1)
+            nll = -tf.reduce_mean(tf.reduce_sum(norm_dec.log_prob(tf.expand_dims(output,1)),axis=2),axis=0)
+#             nll = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(std))+.5*((mean-tf.expand_dims(output,1))/std)**2,axis=2),axis=0)
+#             nll1 = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(tf.expand_dims(std,0)))+.5*((tf.expand_dims(mean,0)-tf.expand_dims(output,1))/tf.expand_dims(std,0))**2,axis=2),axis=0)
+        return nll
     
     def build(self,**kwargs):
         """
@@ -105,79 +133,31 @@ class VariationalAE:
         input = Input(shape=(self.dim,), name='encoder_input')
         latent_input = Input(shape=(self.latent_dim,), name='decoder_input')
         
-        
         encoded_out = self._set_layers(input, 'encode')
-        
-        # encoderQ(z|x)
-        self.encoder = Model(input, encoded_out, name='encoder')
-        mean = self.encoder(input)[:,:self.latent_dim]
-        logvar = self.encoder(input)[:,self.latent_dim:]
-        z = self.reparameterize(mean, logvar)
-        out = self._set_layers(z,'decode')
-        
-        # decoderP(x|z)
         decoded_out = self._set_layers(latent_input, 'decode')
+        
+        # encoder
+        self.encoder = Model(input, encoded_out, name='encoder')
+        # decoder
         self.decoder = Model(latent_input, decoded_out, name='decoder')
         
         # full auto-encoder model
-        self.model = Model(inputs=input, outputs=out, name='autoencoder')
+        model_out = self.decoder(self.reparametrize(self.encoder(input)))
+        if self.repatr_out: model_out = self.reparametrize(model_out, dim=self.dim)
+        self.model = Model(inputs=input, outputs=model_out, name='autoencoder')
         
-            
-        '''def loss(self,y_true, y_pred):
-            # E[log P(X|z)]
-            recon = K.sum(K.binary_crossentropy(y_pred, y_true), axis=1)
-            # D_KL(Q(z|X) || P(z|X)); calculate in closed form as both dist. are Gaussian
-            kl = 0.5 * K.sum(K.exp(logvar) + K.square(mean) - 1. - logvar, axis=1)
-            return tf.reduce_mean(recon + kl)'''
         # compile model
-        self.optimizer = kwargs.pop('optimizer','adam')
-        #loss = kwargs.pop('loss','mse')
-        #metrics = kwargs.pop('metrics',['mae'])
-        #self.model.compile(optimizer=optimizer, loss=loss, metrics=metrics, experimental_run_tf_function=False,**kwargs)
+        optimizer = kwargs.pop('optimizer','adam')
+        beta = kwargs.pop('beta',1)
+        custom_loss = kwargs.pop('custom_loss',None)
+        metrics = kwargs.pop('metrics',['mae'])
+        self.model.compile(optimizer=optimizer, loss=self._loss(beta,custom_loss), metrics=metrics, **kwargs)
     
-    def lossf(self,y_true, y_pred):
-        mean, logvar = self.encode(y_true)
-        # E[log P(X|z)]
-        recon = K.sum(K.binary_crossentropy(y_pred, y_true), axis=1)
-        # D_KL(Q(z|X) || P(z|X)); calculate in closed form as both dist. are Gaussian
-        kl = 0.5 * K.sum(K.exp(logvar) + K.square(mean) - 1. - logvar, axis=1)
-        return tf.reduce_mean(recon + kl)
-        
-    def encode(self, x):
-        mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
-        return mean, logvar
-    
-    def train_step(self,x, **kwargs):
-        """Executes one training step and returns the loss.
-        This computes the loss and gradients, and uses the latter to update the model's parameters.
-        """
-        #optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-        
-        with tf.GradientTape() as tape:
-            x_pred = self.model(x)
-            loss = self.lossf(x, x_pred)
-        gradients = tape.gradient(loss, self.model.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
-        return loss.numpy()
-  
     def train(self, x_train, x_test=None, epochs=100, batch_size=32, verbose=0, **kwargs):
         """
         Train the model with data
         """
-        x_traind = (tf.data.Dataset.from_tensor_slices(tf.cast(x_train,dtype=tf.float32))
-                 .shuffle(x_train.shape[0]).batch(batch_size))
-        if x_test.all():
-            x_testd = (tf.data.Dataset.from_tensor_slices(tf.cast(x_test,dtype=tf.float32)).
-                       shuffle(x_test.shape[0]).batch(batch_size))
-        for epoch in range(1, epochs + 1):
-            loss = np.zeros(epochs)
-            for x_train in x_traind:
-                loss[epoch]+=self.train_step(x_train)
-            print('loss:{}'.format(loss[epoch]))
-            if epoch>10:
-                if loss[epoch]>loss[epoch-1]:
-                    break
-        '''num_samp=x_train.shape[0]
+        num_samp=x_train.shape[0]
         if x_test is None:
             tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
             te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
@@ -191,30 +171,7 @@ class VariationalAE:
                                       batch_size=batch_size,
                                       shuffle=True,
                                       callbacks=[es],
-                                      verbose=verbose,**kwargs)'''
-    
-    def log_normal_pdf(sample, mean, logvar, raxis=1):
-        log2pi = tf.math.log(2. * np.pi)
-        return tf.reduce_sum(-.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),axis=raxis)
-    
-    '''def _custom_loss(self,loss_f):
-        
-        """ Calculate loss = reconstruction loss + KL loss for each data in minibatch """
-        
-        q_z = tfp.distributions.Normal(loc=q_mu, scale=q_sigma)
-        z = self.reparameterize(mean, logvar)
-        x_logit = self.decoder(z)
-        cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
-        logpx_z = -tf.reduce_sum(cross_ent, axis=[1, 2, 3])
-        logpz = log_normal_pdf(z, 0., 0.)
-        logqz_x = log_normal_pdf(z, mean, logvar)
-        return -tf.reduce_mean(logpx_z + logpz - logqz_x)
-        def loss(y_true, y_pred):
-            L=.5*tf.keras.losses.MSE(y_true, y_pred) # mse: prior
-            L+=loss_f(self.encoder(y_true),y_pred) # potential on latent space: likelihood
-            return L
-        return loss'''
-    
+                                      verbose=verbose,**kwargs)
     
     def save(self, savepath='./'):
         """
@@ -225,7 +182,23 @@ class VariationalAE:
         self.encoder.save(os.path.join(savepath,'ae_encoder.h5'))
         self.decoder.save(os.path.join(savepath,'ae_decoder.h5'))
     
-   
+    def encode(self, input):
+        """
+        Output encoded state
+        """
+        assert input.shape[1]==self.dim, 'Wrong input dimension for encoder!'
+        output = self.reparametrize(self.encoder.predict(input)).numpy()
+        return output
+    
+    def decode(self, input):
+        """
+        Output decoded state
+        """
+        assert input.shape[1]==self.latent_dim, 'Wrong input dimension for decoder!'
+        output = self.decoder.predict(input)
+        if self.repatr_out: output = self.reparametrize(output, self.dim).numpy()
+        return output
+    
     def jacobian(self, input, coding='encode'):
         """
         Obtain Jacobian matrix of encoder (coding encode) or decoder (coding decode)
@@ -253,16 +226,7 @@ if __name__ == '__main__':
     np.random.seed(2020)
     
     # load data
-    algs=['EKI','EKS']
-    num_algs=len(algs)
-    alg_no=0
-    
-    # define the autoencoder (AE)
-    # load data
-    import os
-    ensbl_sz = 500
-    folder = './train_DNN'
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
+    loaded=np.load(file='./vae_training.npz')
     X=loaded['X']
     num_samp=X.shape[0]
     
@@ -272,21 +236,19 @@ if __name__ == '__main__':
     
     # define Auto-Encoder
     half_depth=3; latent_dim=441
-    vae=VariationalAE(X.shape[1], half_depth, 100,500)
+    vae=VAE(num_samp, half_depth, latent_dim)
     epochs=200
     import timeit
     t_start=timeit.default_timer()
     vae.train(x_train,x_test,epochs,batch_size=64,verbose=1)
     t_used=timeit.default_timer()-t_start
-    print('\nTime used for training AutoEncoder: {}'.format(t_used))
-    f_name=['vae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'.h5' for i in ('fullmodel','encoder','decoder')]
-
+    print('\nTime used for training variational AutoEncoder: {}'.format(t_used))
+    
     # save Auto-Encoder
-    vae.model.save(os.path.join(folder,f_name[0]))
-    vae.encoder.save(os.path.join(folder,f_name[1]))
-    vae.decoder.save(os.path.join(folder,f_name[2])) # cannot save, but can be reconstructed by: 
+    vae.model.save('./result/vae_fullmodel.h5')
+    vae.encoder.save('./result/vae_encoder.h5')
+    vae.decoder.save('./result/vae_decoder.h5') # cannot save, but can be reconstructed by: 
     # how to laod model
 #     from tensorflow.keras.models import load_model
 #     reconstructed_model=load_model('XX_model.h5')
-    
     
