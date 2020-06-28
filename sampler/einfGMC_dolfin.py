@@ -3,10 +3,6 @@
 Geometric Infinite dimensional MCMC samplers with CNN emulator
 using FEniCS dolfin library https://bitbucket.org/fenics-project/dolfin
 Shiwei Lan @ ASU, 2020
--------------------------------
-This is to accompany this paper: https://arxiv.org/abs/1910.05692
-# It has been configured to use low-rank Hessian approximation.
-After the class is instantiated with arguments, call sample to collect MCMC samples which will be stored in 'result' folder.
 -----------------------------------
 Originally created October 11, 2016
 Modified June 3, 2020 @ ASU
@@ -38,7 +34,6 @@ class einfGMC:
         self.model=model
         
         target_acpt=kwargs.pop('target_acpt',0.65)
-        self.volcrK=kwargs.pop('volcrK',False)
         # geometry needed
         geom_ord=[0]
         if any(s in alg_name for s in ['MALA','HMC']): geom_ord.append(1)

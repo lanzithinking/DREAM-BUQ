@@ -3,10 +3,6 @@
 Geometric Infinite dimensional MCMC samplers with AutoEncoder
 using FEniCS dolfin library https://bitbucket.org/fenics-project/dolfin
 Shiwei Lan @ ASU, 2020
--------------------------------
-This is to accompany this paper: https://arxiv.org/abs/1910.05692
-# It has been configured to use low-rank Hessian approximation.
-After the class is instantiated with arguments, call sample to collect MCMC samples which will be stored in 'result' folder.
 -----------------------------------
 Originally created October 11, 2016
 Modified May 29, 2020 @ ASU
@@ -14,7 +10,7 @@ Modified May 29, 2020 @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -27,7 +23,6 @@ class AEinfGMC:
     AutoEncoder MCMC samplers by Shahbaba, Babak, Luis Martinez Lomeli, Tian Chen, Shiwei Lan
     https://arxiv.org/abs/1910.05692
     -------------------------------------------------------------------
-#     It has been configured to use low-rank Hessian approximation.
     After the class is instantiated with arguments, call sample to collect MCMC samples which will be stored in 'result' folder.
     """
     def __init__(self,parameter_init,model,latent_geom,ae,step_size,step_num,alg_name,adpt_h=False,**kwargs):
@@ -36,26 +31,26 @@ class AEinfGMC:
         """
         # parameters
         self.q=parameter_init
-        self.dim=self.q.size
+        self.dim=self.q.size()
         self.model=model
         
         target_acpt=kwargs.pop('target_acpt',0.65)
+        self.volcrK=kwargs.pop('volcrK',False)
         # geometry needed
         geom_ord=[0]
         if any(s in alg_name for s in ['MALA','HMC']): geom_ord.append(1)
         if any(s in alg_name for s in ['mMALA','mHMC']): geom_ord.append(2)
-        self.geom=lambda parameter: latent_geom(parameter,geom_ord=geom_ord,whitened=True)
+        self.geom=lambda parameter: latent_geom(parameter,geom_ord=geom_ord,**kwargs)
         self.ll,self.g,_,self.eigs=self.geom(self.q)
 #         self.ll,self.g,_,self.eigs=self.model.get_geom(self.q,geom_ord,**kwargs)
-
+        
         # sampling setting
         self.h=step_size
         self.L=step_num
         if 'HMC' not in alg_name: self.L=1
         self.alg_name = alg_name
         self.ae=ae
-        self.volcrK=kwargs.pop('volcrK',False)
-
+        
         # optional setting for adapting step size
         self.adpt_h=adpt_h
         if self.adpt_h:
@@ -76,12 +71,11 @@ class AEinfGMC:
         sample v ~ N(0,C) or N(0,invK(q))
         """
         if post_Ga is None:
-#             v = self.model.prior.sample()
-            v = np.random.randn(self.ae.latent_dim) # in whitened space
+            v = self.model.prior.sample()
         else:
             v = self.model.post_Ga.sample()
         return v
-        
+    
     def AE_pCN(self):
         """
         preconditioned Crank-Nicolson with AutoEncoder
@@ -93,91 +87,101 @@ class AEinfGMC:
         # sample velocity
         v=self.randv()
         
+        # correct volume if requested
         if self.volcrK:
-            q_=self.ae.decode(q[None,:])
-#             q_=self.model.prior.C_act(q_.flatten(),.5).get_local()[None,:] # back in the original space
+            q_=self.ae.decode(q.get_local()[None,:])
             logvol+=self.ae.logvol(q_,'encode')
         
         # generate proposal according to Crank-Nicolson scheme
-#         q.zero()
-#         q.axpy((1-self.h/4)/(1+self.h/4),self.q)
-#         q.axpy(np.sqrt(self.h)/(1+self.h/4),v)
-        q = (1-self.h/4)/(1+self.h/4)*q + np.sqrt(self.h)/(1+self.h/4)*v # in the latent space in whitened coordinates
-
+        q.zero()
+        q.axpy((1-self.h/4)/(1+self.h/4),self.q)
+        q.axpy(np.sqrt(self.h)/(1+self.h/4),v)
+        
         # update geometry
         ll,_,_,_=self.geom(q)
-#         ll=self.ll
-        if self.volcrK: logvol+=self.ae.logvol(q[None,:],'decode') # TODO: need go back to the original scale too?
-
+        
+        # correct volume if requested
+        if self.volcrK: logvol+=self.ae.logvol(q.get_local()[None,:],'decode') # TODO: need go back to the original scale too?
+        
         # Metropolis test
         logr=ll-self.ll+logvol
-
+        
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll;
             acpt=True
         else:
             acpt=False
-
+        
         # return accept indicator
         return acpt,logr
-
-    def infMALA(self):
+    
+    def AE_infMALA(self):
         """
-        infinite dimensional Metropolis Adjusted Langevin Algorithm
+        infinite dimensional Metropolis Adjusted Langevin Algorithm with AutoEncoder
         """
+        logvol=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h)
         
         # sample velocity
         v=self.randv()
-
+        
         # natural gradient
         ng=self.model.prior.C_act(self.g)
-
+        
         # update velocity
         v.axpy(rth/2,ng)
-
+        
         # current energy
         E_cur = -self.ll - rth/2*self.g.inner(v) + self.h/8*self.g.inner(ng)
-
+        
+        # correct volume if requested
+        if self.volcrK:
+            q_=self.ae.decode(q.get_local()[None,:])
+            logvol+=self.ae.logvol(q_,'encode')
+        
         # generate proposal according to Langevin dynamics
         q.zero()
         q.axpy((1-self.h/4)/(1+self.h/4),self.q)
         q.axpy(rth/(1+self.h/4),v)
-
+        
         # update velocity
         v_=v.copy();v.zero()
         v.axpy(-(1-self.h/4)/(1+self.h/4),v_)
         v.axpy(rth/(1+self.h/4),self.q)
-
+        
         # update geometry
         ll,g,_,_=self.geom(q)
-
+        
         # natural gradient
         ng=self.model.prior.C_act(g)
-
+        
         # new energy
         E_prp = -ll - rth/2*g.inner(v) + self.h/8*g.inner(ng)
-
+        
+        # correct volume if requested
+        if self.volcrK: logvol+=self.ae.logvol(q.get_local()[None,:],'decode')
+        
         # Metropolis test
-        logr=-E_prp+E_cur
-
+        logr=-E_prp+E_cur+logvol
+        
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll; self.g=g;
             acpt=True
         else:
             acpt=False
-
+        
         # return accept indicator
         return acpt,logr
-
-    def infHMC(self):
+    
+    def AE_infHMC(self):
         """
-        infinite dimensional Hamiltonian Monte Carlo
+        infinite dimensional Hamiltonian Monte Carlo with AutoEncoder
         """
+        logvol=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h) # make the scale comparable to MALA
@@ -194,6 +198,11 @@ class AEinfGMC:
 
         # current energy
         E_cur = -self.ll - self.h/8*self.g.inner(ng)
+        
+        # correct volume if requested
+        if self.volcrK:
+            q_=self.ae.decode(q.get_local()[None,:])
+            logvol+=self.ae.logvol(q_,'encode')
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -224,9 +233,12 @@ class AEinfGMC:
 
         # new energy
         E_prp = -ll - self.h/8*g.inner(ng)
+        
+        # correct volume if requested
+        if self.volcrK: logvol+=self.ae.logvol(q.get_local()[None,:],'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur-pw
+        logr=-E_prp+E_cur-pw+logvol
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
@@ -238,10 +250,11 @@ class AEinfGMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmMALA(self):
+    def AE_DRinfmMALA(self):
         """
-        dimension-reduced infinite dimensional manifold MALA
+        dimension-reduced infinite dimensional manifold MALA with AutoEncoder
         """
+        logvol=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h)
@@ -258,6 +271,11 @@ class AEinfGMC:
         # current energy
         E_cur = -self.ll - rth/2*self.g.inner(v) + self.h/8*self.g.inner(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
+        # correct volume if requested
+        if self.volcrK:
+            q_=self.ae.decode(q.get_local()[None,:])
+            logvol+=self.ae.logvol(q_,'encode')
+        
         # generate proposal according to simplified manifold Langevin dynamics
         q.zero()
         q.axpy((1-self.h/4)/(1+self.h/4),self.q)
@@ -277,9 +295,12 @@ class AEinfGMC:
 
         # new energy
         E_prp = -ll - rth/2*g.inner(v) + self.h/8*g.inner(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
+        
+        # correct volume if requested
+        if self.volcrK: logvol+=self.ae.logvol(q.get_local()[None,:],'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur
+        logr=-E_prp+E_cur+logvol
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
@@ -291,10 +312,11 @@ class AEinfGMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmHMC(self):
+    def AE_DRinfmHMC(self):
         """
-        dimension-reduced infinite dimensional manifold HMC
+        dimension-reduced infinite dimensional manifold HMC with AutoEncoder
         """
+        logvol=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h) # make the scale comparable to MALA
@@ -313,6 +335,11 @@ class AEinfGMC:
         # current energy
         E_cur = -self.ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
+        # correct volume if requested
+        if self.volcrK:
+            q_=self.ae.decode(q.get_local()[None,:])
+            logvol+=self.ae.logvol(q_,'encode')
+        
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
         for l in range(randL):
@@ -343,9 +370,12 @@ class AEinfGMC:
 
         # new energy
         E_prp = -ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
+        
+        # correct volume if requested
+        if self.volcrK: logvol+=self.ae.logvol(q.get_local()[None,:],'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur-pw
+        logr=-E_prp+E_cur-pw+logvol
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
@@ -399,14 +429,13 @@ class AEinfGMC:
             print('\nRunning '+self.alg_name+' now...\n')
 
         # allocate space to store results
-#         import os
-#         samp_fname='_samp_'+self.alg_name+'_dim'+str(self.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
-#         samp_fpath=os.path.join(os.getcwd(),'result')
-#         if not os.path.exists(samp_fpath):
-#             os.makedirs(samp_fpath)
-# #         self.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
-#         self.samp=df.HDF5File(self.model.pde.mpi_comm,os.path.join(samp_fpath,samp_fname+".h5"),"w")
-        self.samp=np.zeros((num_samp,self.ae.latent_dim))
+        import os
+        samp_fname='_samp_'+self.alg_name+'_dim'+str(self.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
+        samp_fpath=os.path.join(os.getcwd(),'result')
+        if not os.path.exists(samp_fpath):
+            os.makedirs(samp_fpath)
+#         self.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
+        self.samp=df.HDF5File(self.model.pde.mpi_comm,os.path.join(samp_fpath,samp_fname+".h5"),"w")
         self.loglik=np.zeros(num_samp+num_burnin)
         self.acpt=0.0 # final acceptance rate
         self.times=np.zeros(num_samp+num_burnin) # record the history of time used for each sample
@@ -461,15 +490,14 @@ class AEinfGMC:
             # save results
             self.loglik[s]=self.ll
             if s>=num_burnin:
-# #                 self.samp << vec2fun(self.q,self.model.prior.V,name='sample_{0}'.format(s-num_burnin))
-#                 q_f=df.Function(self.model.prior.V)
-# #                 q_f.vector()[:]=self.q
-#                 q_f.vector().set_local(self.q)
-#                 q_f.vector().apply('')
-# #                 q_f.vector().zero()
-# #                 q_f.vector().axpy(1.,self.q)
-#                 self.samp.write(q_f,'sample_{0}'.format(s-num_burnin))
-                self.samp[s-num_burnin]=self.q
+#                 self.samp << vec2fun(self.q,self.model.prior.V,name='sample_{0}'.format(s-num_burnin))
+                q_f=df.Function(self.model.prior.V)
+#                 q_f.vector()[:]=self.q
+                q_f.vector().set_local(self.q)
+                q_f.vector().apply('')
+#                 q_f.vector().zero()
+#                 q_f.vector().axpy(1.,self.q)
+                self.samp.write(q_f,'sample_{0}'.format(s-num_burnin))
                 self.acpt+=acpt_idx
             
             # record the time
@@ -487,7 +515,7 @@ class AEinfGMC:
                     print('Adaptation completed; step size freezed at:  %.6f\n' % self.h_adpt['h'])
 
         # stop timer
-#         self.samp.close()
+        self.samp.close()
         toc=timeit.default_timer()
         self.time=toc-tic
         self.acpt/=num_samp

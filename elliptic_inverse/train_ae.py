@@ -58,7 +58,7 @@ ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 # ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
 #                activation=activation, optimizer=optimizer, loss=nll, run_eagerly=True)
 # folder=folder+'/saved_model'
-f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'_customloss' for i in ('fullmodel','encoder','decoder')]
+f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
 try:
     ae.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')

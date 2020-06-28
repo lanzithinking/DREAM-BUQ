@@ -78,7 +78,7 @@ except Exception as err:
     print('\nTime used for training DNN: {}'.format(t_used))
     # save DNN
 #     dnn.model.save(os.path.join(folder,f_name+'.h5'))
-#     dnn.save(folder,'dnn_'+algs[alg_no]+str(ensbl_sz)) # fails due to the custom kernel_initializer
+#     dnn.save(folder,f_name) # fails due to the custom kernel_initializer
     dnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
 
 # some more test

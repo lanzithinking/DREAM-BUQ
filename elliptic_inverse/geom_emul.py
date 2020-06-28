@@ -3,6 +3,7 @@ Geometric functions by CNN emulation
 """
 
 import numpy as np
+import dolfin as df
 import tensorflow as tf
 import sys,os
 sys.path.append( "../" )

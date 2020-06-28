@@ -65,7 +65,7 @@ loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misf
 f_name='cnn_'+algs[alg_no]+str(ensbl_sz)
 try:
     cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
-#     nn.model.load_weights(os.path.join(folder,f_name+'.h5'))
+#     cnn.model.load_weights(os.path.join(folder,f_name+'.h5'))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
@@ -79,7 +79,7 @@ except Exception as err:
     print('\nTime used for training CNN: {}'.format(t_used))
     # save CNN
     cnn.model.save(os.path.join(folder,f_name+'.h5'))
-#     cnn.save(folder,'cnn_'+algs[alg_no]+str(ensbl_sz))
+#     cnn.save(folder,f_name)
 #     cnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
 
 # some more test
