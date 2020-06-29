@@ -56,7 +56,7 @@ def main():
     # load data
     ensbl_sz = 500
     folder = './analysis_f_SNR'+str(SNR)
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
     X=loaded['X']
     Y=loaded['Y']
     # pre-processing: scale X to 0-1

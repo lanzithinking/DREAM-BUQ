@@ -1,5 +1,5 @@
 """
-Extract functions stored in hdf5 files and prepare them as images for CNN training
+Extract functions stored in hdf5 files and prepare them as training data
 Shiwei Lan @ ASU, May 2020
 """
 
@@ -11,7 +11,7 @@ sys.path.append( "../" )
 from util.dolfin_gadget import fun2img
 import pickle
 
-TRAIN={0:'CNN',1:'AE'}[0]
+TRAIN={0:'XimgY',1:'X'}[0]
 
 def retrieve_ensemble(mpi_comm,V,dir_name,f_name,ensbl_sz,max_iter,img_out=False):
     f=df.HDF5File(mpi_comm,os.path.join(dir_name,f_name),"r")
@@ -27,7 +27,7 @@ def retrieve_ensemble(mpi_comm,V,dir_name,f_name,ensbl_sz,max_iter,img_out=False
     prog=np.ceil(num_ensbls*(.1+np.arange(0,1,.1)))
     for n in range(max_iter):
         for j in range(ensbl_sz):
-            f.read(ensbl_f,'iter{0}_ensbl{1}'.format(n+(TRAIN=='AE'),j))
+            f.read(ensbl_f,'iter{0}_ensbl{1}'.format(n+('Y' not in TRAIN),j))
             s=n*ensbl_sz+j
             out[s]=fun2img(ensbl_f) if img_out else ensbl_f.vector().get_local()
             if s+1 in prog:
@@ -51,7 +51,7 @@ if __name__ == '__main__':
     pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
     ensbl_sz=500
     max_iter=10
-    img_out=(TRAIN=='CNN')
+    img_out=('img' in TRAIN)
     
     PLOT=False
     SAVE=True
@@ -82,7 +82,7 @@ if __name__ == '__main__':
                 plt.show()
                 plt.pause(1.0/100.0)
         # forward outputs
-        if TRAIN=='CNN':
+        if 'Y' in TRAIN:
             for f_i in pckl_files:
                 if algs[a]+'_ensbl'+str(ensbl_sz)+'_' in f_i:
                     try:
@@ -97,7 +97,7 @@ if __name__ == '__main__':
                         pass
         if found and SAVE:
             savepath='./train_model/'
-            if TRAIN=='CNN':
+            if 'Y' in TRAIN:
                 np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out,Y=fwdout)
             else:
                 np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out)

@@ -30,10 +30,10 @@ tf.random.set_seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=0)
+    parser.add_argument('algNO', nargs='?', type=int, default=3)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.2,2.,1.5,3.,2.5])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.2,2.,1.5,3.,2.5]) # latent_dim441: [.2,2.,1.5,3.,2.5]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['AE_'+n for n in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     args = parser.parse_args()
@@ -48,7 +48,7 @@ def main():
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
     # define the latent (coarser) inverse problem
-    nx=20; ny=20
+    nx=10; ny=10
     obs,nzsd,loc=[getattr(elliptic.misfit,i) for i in ('obs','nzsd','loc')]
     elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR,obs=obs,nzsd=nzsd,loc=loc)
     
@@ -60,7 +60,7 @@ def main():
     # load data
     ensbl_sz = 500
     folder = './analysis_f_SNR'+str(SNR)
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
     X=loaded['X']
     num_samp=X.shape[0]
 #     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
@@ -108,7 +108,7 @@ def main():
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
     latent_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic,ae,geom_ord,whitened,**kwargs)
-    AE_infGMC=AEinfGMC(unknown,elliptic_latent,latent_geom,ae,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False)#,k=5,bip_lat=elliptic_latent)
+    AE_infGMC=AEinfGMC(unknown,elliptic_latent,latent_geom,ae,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
     mc_fun=AE_infGMC.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)

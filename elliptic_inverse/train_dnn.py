@@ -29,9 +29,9 @@ alg_no=1
 # load data
 ensbl_sz = 500
 folder = './train_NN'
-loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
 X=loaded['X']
-loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
 Y=loaded['Y']
 # pre-processing: scale X to 0-1
 # X-=np.nanmin(X,axis=1,keepdims=True)

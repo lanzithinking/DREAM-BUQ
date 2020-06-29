@@ -21,7 +21,7 @@ nx=40; ny=40
 SNR=50
 elliptic = Elliptic(nx=nx,ny=ny,SNR=SNR)
 # define the latent (coarser) inverse problem
-nx=20; ny=20
+nx=10; ny=10
 obs,nzsd,loc=[getattr(elliptic.misfit,i) for i in ('obs','nzsd','loc')]
 elliptic_latent = Elliptic(nx=nx,ny=ny,SNR=SNR,obs=obs,nzsd=nzsd,loc=loc)
 # algorithms
@@ -33,7 +33,7 @@ alg_no=1
 # load data
 ensbl_sz = 500
 folder = './train_NN'
-loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_AE.npz'))
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
 X=loaded['X']
 # pre-processing: scale X to 0-1
 # X-=np.nanmin(X,axis=1,keepdims=True)

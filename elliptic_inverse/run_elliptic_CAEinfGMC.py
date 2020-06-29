@@ -60,7 +60,7 @@ def main():
     # load data
     ensbl_sz = 500
     folder = './analysis_f_SNR'+str(SNR)
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_CNN.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
     X=loaded['X']
     X=X[:,:-1,:-1,None]
     num_samp=X.shape[0]
@@ -110,7 +110,7 @@ def main():
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
     latent_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic_latent.pde.V,elliptic,cae,geom_ord,whitened,**kwargs)
-    CAE_infGMC=CAEinfGMC(unknown,elliptic_latent,latent_geom,cae,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False)#,k=5,bip_lat=elliptic_latent)
+    CAE_infGMC=CAEinfGMC(unknown,elliptic_latent,latent_geom,cae,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False)#,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
     mc_fun=CAE_infGMC.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)
