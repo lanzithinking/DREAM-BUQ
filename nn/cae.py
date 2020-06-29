@@ -10,7 +10,7 @@ Created June 14, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -62,8 +62,13 @@ class ConvAutoEncoder:
         filters = self.num_filters
         output = input
         for i in range(self.half_depth):
-            output=Conv2D(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                          activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='encode_conv_layer{}'.format(i))(output)
+            if callable(self.activations['conv']):
+                output=Conv2D(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
+                              kernel_initializer=self.kernel_initializer, name='encode_conv_layer{}'.format(i))(output)
+                output = self.activations['conv'](output)
+            else:
+                output=Conv2D(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
+                              activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='encode_conv_layer{}'.format(i))(output)
             output=MaxPooling2D(pool_size=self.pool_size, name='encode_pool_layer{}'.format(i))(output)
         if self.activations['latent'] is not None:
             output=Flatten()(output)
@@ -93,12 +98,15 @@ class ConvAutoEncoder:
             output = Reshape(pre_flatten_shape)(output)
         for i in range(self.half_depth):
             output=UpSampling2D(size=self.pool_size, name='decode_unpool_layer{}'.format(i))(output)
-            if i<self.half_depth-1:
-                output=Conv2DTranspose(filters=filters[i], kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                                       activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='decode_deconv_layer{}'.format(i))(output)
+            filter_size = 1 if i==self.half_depth-1 else filters[i]
+            layer_name = 'decode_out' if i==self.half_depth-1 else 'decode_deconv_layer{}'.format(i)
+            if callable(self.activations['conv']):
+                output=Conv2DTranspose(filters=filter_size, kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
+                                       kernel_initializer=self.kernel_initializer, name=layer_name)(output)
+                output = self.activations['conv'](output)
             else:
-                output=Conv2DTranspose(filters=1, kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
-                                       activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name='decode_out')(output)
+                output=Conv2DTranspose(filters=filter_size, kernel_size=self.kernel_size, strides=self.strides, padding=self.padding,
+                                       activation=self.activations['conv'], kernel_initializer=self.kernel_initializer, name=layer_name)(output)
         return output
     
     def _custom_loss(self,loss_f):
@@ -188,8 +196,10 @@ class ConvAutoEncoder:
         with tf.GradientTape(persistent=True) as g:
             g.watch(x)
             y = model(x)
-#         jac = g.jacobian(y,x).numpy()
-        jac = g.jacobian(y,x,experimental_use_pfor=(coding=='encode')).numpy() # use this for some problematic activations e.g. LeakyReLU
+        try:
+            jac = g.jacobian(y,x).numpy()
+        except:
+            jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
     
     def logvol(self, input, coding='encode'):
@@ -197,7 +207,7 @@ class ConvAutoEncoder:
         Obtain the log-volume defined by Gram matrix determinant
         """
         jac = self.jacobian(input, coding)
-        jac = jac.reshape({'encode':(self.latent_dim,-1),'decode':(-1,self.latent_dim)}[coding])
+        jac = jac.reshape({'encode':(np.prod(self.latent_dim),-1),'decode':(-1,np.prod(self.latent_dim))}[coding])
         d = np.abs(np.linalg.svd(jac,compute_uv=False))
         return np.sum(np.log(d[d>0]))
 

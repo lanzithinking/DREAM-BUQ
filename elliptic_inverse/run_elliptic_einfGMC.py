@@ -21,8 +21,12 @@ sys.path.append( "../" )
 from nn.cnn import CNN
 from sampler.einfGMC_dolfin import einfGMC
 
+# relevant geometry
+from geom_emul import geom
+
 np.set_printoptions(precision=3, suppress=True)
 np.random.seed(2020)
+tf.random.set_seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -101,7 +105,6 @@ def main():
     print("Preparing %s sampler with step size %g for %d step(s)..."
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
-    from geom_emul import geom
     emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic,cnn,geom_ord,whitened,**kwargs)
     e_infGMC=einfGMC(unknown,elliptic,emul_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],k=5)
     mc_fun=e_infGMC.sample

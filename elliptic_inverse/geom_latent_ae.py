@@ -5,7 +5,6 @@ Geometric functions of latent variables, which are encoder outputs
 import numpy as np
 import dolfin as df
 import sys,os
-from logging import raiseExceptions
 sys.path.append( "../" )
 # from util.dolfin_gadget import vec2fun,fun2img,img2fun
 # from util.multivector import *

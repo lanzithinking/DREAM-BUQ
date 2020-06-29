@@ -15,7 +15,10 @@ from tensorflow.keras.models import load_model
 # functions needed to make even image size
 def pad(A,sz=1):
     A_padded=np.zeros([i+sz for i in A.shape])
-    A_padded[:-sz,:-sz]=A
+    if sz:
+        A_padded[:-sz,:-sz]=A
+    else:
+        A_padded=A
     return A_padded
 def chop(A,sz=1):
     return A[:-sz,:-sz]
@@ -37,7 +40,7 @@ algs=['EKI','EKS']
 num_algs=len(algs)
 alg_no=1
 
-# define the convolutional autoencoder (AE)
+# define the convolutional autoencoder (CAE)
 # load data
 ensbl_sz = 500
 folder = './train_NN'
@@ -57,7 +60,7 @@ n_tr=np.int(num_samp*.75)
 x_train=X[:n_tr]
 x_test=X[n_tr:]
 
-# define AE
+# define CAE
 num_filters=[16,1]
 # activations={'conv':'linear','latent':tf.keras.layers.PReLU()}
 # activations={'conv':'relu','latent':'linear'}

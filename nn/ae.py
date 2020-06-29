@@ -153,8 +153,10 @@ class AutoEncoder:
         with tf.GradientTape(persistent=True) as g:
             g.watch(x)
             y = model(x)
-        jac = g.jacobian(y,x).numpy()
-#         jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
+        try:
+            jac = g.jacobian(y,x).numpy()
+        except:
+            jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
     
     def logvol(self, input, coding='encode'):
