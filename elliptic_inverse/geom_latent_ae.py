@@ -18,13 +18,13 @@ def geom(unknown_lat,bip,ae,geom_ord=[0],whitened=False,**kwargs):
 #     if whitened:
 #         unknown_lat=bip_lat.prior.v2u(unknown_lat)
     
-    unkown=bip.prior.gen_vector(ae.decode(unknown_lat.get_local()[None,:]).flatten())
+    unknown=bip.prior.gen_vector(ae.decode(unknown_lat.get_local()[None,:]).flatten())
     bip_lat=kwargs.pop('bip_lat',None)
     
     if len(kwargs)==0:
-        loglik,gradlik,metact_,rtmetact_ = bip.get_geom(unkown,geom_ord,whitened)
+        loglik,gradlik,metact_,rtmetact_ = bip.get_geom(unknown,geom_ord,whitened)
     else:
-        loglik,gradlik,metact_,eigs_ = bip.get_geom(unkown,geom_ord,whitened,**kwargs)
+        loglik,gradlik,metact_,eigs_ = bip.get_geom(unknown,geom_ord,whitened,**kwargs)
     
     if any(s>=1 for s in geom_ord):
         jac=ae.jacobian(unknown_lat.get_local()[None,:],'decode')

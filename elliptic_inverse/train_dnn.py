@@ -46,15 +46,15 @@ x_test,y_test=X[n_tr:],Y[n_tr:]
 depth=3
 # activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.1)
-activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.1),'output':'linear'}
-# activations={'hidden':tf.math.sin,'output':tf.keras.layers.LeakyReLU(alpha=0.1)}
+# activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.1),'output':'linear'}
+activations={'hidden':tf.math.sin,'output':'linear'}
 droprate=.4
-# sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-# kernel_initializers={'hidden':sin_init,'output':'glorot_uniform'}
+sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+kernel_initializers={'hidden':sin_init,'output':'he_uniform'}
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
 dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
-        activations=activations, optimizer=optimizer)
+        activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
 # dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,

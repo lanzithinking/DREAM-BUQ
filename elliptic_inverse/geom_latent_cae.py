@@ -30,13 +30,13 @@ def geom(unknown_lat,V_lat,bip,cae,geom_ord=[0],whitened=False,**kwargs):
 #         unknown_lat=bip_lat.prior.v2u(unknown_lat)
     
     ulat_img=chop(fun2img(vec2fun(unknown_lat, V_lat)))
-    unkown=img2fun(pad(np.squeeze(cae.decode(ulat_img[None,:,:,None]))),bip.pde.V).vector()
+    unknown=img2fun(pad(np.squeeze(cae.decode(ulat_img[None,:,:,None]))),bip.pde.V).vector()
     bip_lat=kwargs.pop('bip_lat',None)
     
     if len(kwargs)==0:
-        loglik,gradlik,metact_,rtmetact_ = bip.get_geom(unkown,geom_ord,whitened)
+        loglik,gradlik,metact_,rtmetact_ = bip.get_geom(unknown,geom_ord,whitened)
     else:
-        loglik,gradlik,metact_,eigs_ = bip.get_geom(unkown,geom_ord,whitened,**kwargs)
+        loglik,gradlik,metact_,eigs_ = bip.get_geom(unknown,geom_ord,whitened,**kwargs)
     
     if any(s>=1 for s in geom_ord):
         jac_img_=cae.jacobian(ulat_img[None,:,:,None],'decode')
@@ -46,7 +46,7 @@ def geom(unknown_lat,V_lat,bip,cae,geom_ord=[0],whitened=False,**kwargs):
         jac_img=jac_img.reshape(jac_img_.shape[:2]+(-1,))
         d2v = df.dof_to_vertex_map(V_lat)
 #         jac_img=jac_img[:,:,d2v]
-        jac=MultiVector(unkown,V_lat.dim())
+        jac=MultiVector(unknown,V_lat.dim())
 #         [jac[i].set_local(img2fun(pad(jac_img[:,:,i]), bip.pde.V).vector()) for i in range(V_lat.dim())]
         for i,d2v_i in enumerate(d2v):
             jac[i].set_local(img2fun(pad(jac_img[:,:,d2v_i]), bip.pde.V).vector())

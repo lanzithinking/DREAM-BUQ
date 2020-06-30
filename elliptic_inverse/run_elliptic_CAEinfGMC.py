@@ -116,12 +116,12 @@ def main():
     mc_fun(*mc_args)
     
     # append PDE information including the count of solving
-    filename_=os.path.join(CAE_infGMC.savepath,AE_infGMC.filename+'.pckl')
+    filename_=os.path.join(CAE_infGMC.savepath,CAE_infGMC.filename+'.pckl')
     filename=os.path.join(CAE_infGMC.savepath,'Elliptic_'+CAE_infGMC.filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-#     soln_count=[elliptic_latent.soln_count,elliptic_latent.pde.soln_count]
-    soln_count=elliptic_latent.pde.soln_count
+#     soln_count=[elliptic.soln_count,elliptic.pde.soln_count]
+    soln_count=elliptic.pde.soln_count
     pickle.dump([nx,ny,sigma,s,SNR,soln_count,args],f)
     f.close()
 #     # verify with load

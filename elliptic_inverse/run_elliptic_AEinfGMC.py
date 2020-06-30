@@ -118,8 +118,8 @@ def main():
     filename=os.path.join(AE_infGMC.savepath,'Elliptic_'+AE_infGMC.filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-#     soln_count=[elliptic_latent.soln_count,elliptic_latent.pde.soln_count]
-    soln_count=elliptic_latent.pde.soln_count
+#     soln_count=[elliptic.soln_count,elliptic.pde.soln_count]
+    soln_count=elliptic.pde.soln_count
     pickle.dump([nx,ny,sigma,s,SNR,soln_count,args],f)
     f.close()
 #     # verify with load

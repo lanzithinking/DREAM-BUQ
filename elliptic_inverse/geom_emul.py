@@ -1,5 +1,5 @@
 """
-Geometric functions by CNN emulation
+Geometric functions by emulator emulation
 """
 
 import numpy as np
@@ -12,30 +12,30 @@ from util.multivector import *
 from util.Eigen import *
 from posterior import *
 
-def geom(unknown,bip,cnn,geom_ord=[0],whitened=False,**kwargs):
+def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
     loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
     
     # un-whiten if necessary
     if whitened:
         unknown=self.prior.v2u(unknown)
     
-    u_img=fun2img(vec2fun(unknown,bip.pde.V))
+    u_input={'DNN':unknown.get_local()[None,:], 'CNN':fun2img(vec2fun(unknown,bip.pde.V))[None,:,:,None]}[type(emulator).__name__]
     
-    ll_f = lambda x: -0.5*bip.misfit.prec*tf.math.reduce_sum((cnn.model(x)-bip.misfit.obs)**2,axis=1)
+    ll_f = lambda x: -0.5*bip.misfit.prec*tf.math.reduce_sum((emulator.model(x)-bip.misfit.obs)**2,axis=1)
     
     if any(s>=0 for s in geom_ord):
-        loglik = ll_f(u_img[None,:,:,None]).numpy()
+        loglik = ll_f(u_input).numpy()
     
     if any(s>=1 for s in geom_ord):
-        gradlik = img2fun(cnn.gradient(u_img[None,:,:,None], ll_f), bip.pde.V).vector()
+        gradlik = img2fun(emulator.gradient(u_input, ll_f), bip.pde.V).vector()
         if whitened:
             gradlik = bip.prior.C_act(gradlik,.5,op='C',transp=True)
     
     if any(s>=1.5 for s in geom_ord):
-        jac_img = cnn.jacobian(u_img[None,:,:,None])
+        jac_ = emulator.jacobian(u_input)
         n_obs = len(bip.misfit.idx)
         jac = MultiVector(unknown,n_obs)
-        [jac[i].set_local(img2fun(jac_img[i], bip.pde.V).vector()) for i in range(n_obs)]
+        [jac[i].set_local({'DNN':jac_[i],'CNN':img2fun(jac_[i], bip.pde.V).vector()}[type(emulator).__name__]) for i in range(n_obs)]
         def _get_metact_misfit(u_actedon): # GNH
             if type(u_actedon) is not df.Vector:
                 u_actedon = bip.prior.gen_vector(u_actedon)
