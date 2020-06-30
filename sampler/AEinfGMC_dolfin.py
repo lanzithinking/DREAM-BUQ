@@ -544,7 +544,7 @@ class AEinfGMC:
         self.filename=self.alg_name+'_dim'+str(self.dim)+'_'+ctime
         # dump data
         f=open(os.path.join(self.savepath,self.filename+'.pckl'),'wb')
-        res2save=[self.h,self.L,self.alg_name,self.samp,self.loglik,self.acpt,self.time,self.times]
+        res2save=[self.h,self.L,self.alg_name,self.loglik,self.acpt,self.time,self.times]
         if self.adpt_h:
             res2save.append(self.h_adpt)
         pickle.dump(res2save,f)
