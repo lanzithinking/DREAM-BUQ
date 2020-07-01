@@ -35,7 +35,7 @@ def main():
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[.06,.3,.2,.4,.4])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
-    parser.add_argument('algs', nargs='?', type=str, default=['e_'+n for n in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
+    parser.add_argument('algs', nargs='?', type=str, default=['e'+a for a in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     args = parser.parse_args()
 
     ## define the inverse elliptic problem ##

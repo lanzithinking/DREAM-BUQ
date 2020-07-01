@@ -68,19 +68,23 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     if any(s>=1 for s in geom_ord):
         jac_=autoencoder.jacobian(u_latin,'decode')
         if type(autoencoder).__name__=='ConvAutoEncoder':
-#             jac__=np.zeros(jac_.shape[:2]+tuple(i+1 for i in jac_.shape[2:]))
-#             jac__[:,:,:-1,:-1]=jac_; jac_=jac__
-            jac_=pad(jac_,(0,)*2+width)
-            jac_=jac_.reshape(jac_.shape[:2]+(-1,))
-            d2v = df.dof_to_vertex_map(V_lat)
-            jac_=jac_[:,:,d2v]
-        jac=MultiVector(unknown,V_lat.dim())
-#         [jac[i].set_local({'AutoEncoder':jac_[:,i],'ConvAutoEncoder':img2fun(pad(jac_[:,:,i]), V).vector()}[type(autoencoder).__name__]) for i in range(V_lat.dim())] # not working: too many indices?
-        if type(autoencoder).__name__=='AutoEncoder':
-            [jac[i].set_local(jac_[:,i]) for i in range(V_lat.dim()) for i in range(V_lat.dim())]
-        elif type(autoencoder).__name__=='ConvAutoEncoder':
-            [jac[i].set_local(img2fun(pad(jac_[:,:,i],width), V).vector()) for i in range(V_lat.dim())]
-        gradlik_=jac.dot(gradlik)
+# #             jac__=np.zeros(jac_.shape[:2]+tuple(i+1 for i in jac_.shape[2:]))
+# #             jac__[:,:,:-1,:-1]=jac_; jac_=jac__
+#             jac_=pad(jac_,(0,)*2+width)
+#             jac_=jac_.reshape(jac_.shape[:2]+(-1,))
+#             d2v = df.dof_to_vertex_map(V_lat)
+#             jac_=jac_[:,:,d2v]
+#         jac=MultiVector(unknown,V_lat.dim())
+# #         [jac[i].set_local({'AutoEncoder':jac_[:,i],'ConvAutoEncoder':img2fun(pad(jac_[:,:,i]), V).vector()}[type(autoencoder).__name__]) for i in range(V_lat.dim())] # not working: too many indices?
+#         if type(autoencoder).__name__=='AutoEncoder':
+#             [jac[i].set_local(jac_[:,i]) for i in range(V_lat.dim()) for i in range(V_lat.dim())] # for loop is too slow
+#         elif type(autoencoder).__name__=='ConvAutoEncoder':
+#             [jac[i].set_local(img2fun(pad(jac_[:,:,i],width), V).vector()) for i in range(V_lat.dim())] # for loop is too slow
+#         gradlik_=jac.dot(gradlik)
+            jac_=pad(jac_,width*2)
+            jac_=jac_.reshape((np.prod(jac_.shape[:2]),np.prod(jac_.shape[2:])))
+            jac_=jac_[np.ix_(df.dof_to_vertex_map(V), df.dof_to_vertex_map(V_lat))]
+        gradlik_=jac_.T.dot(gradlik.get_local())
         gradlik=df.Vector(unknown_lat)
         gradlik.set_local(gradlik_)
     

@@ -11,7 +11,7 @@ sys.path.append( "../" )
 from util.dolfin_gadget import fun2img
 import pickle
 
-TRAIN={0:'XimgY',1:'X'}[0]
+TRAIN={0:'XimgY',1:'XY'}[1]
 
 def retrieve_ensemble(mpi_comm,V,dir_name,f_name,ensbl_sz,max_iter,img_out=False):
     f=df.HDF5File(mpi_comm,os.path.join(dir_name,f_name),"r")
@@ -96,7 +96,7 @@ if __name__ == '__main__':
                         found=False
                         pass
         if found and SAVE:
-            savepath='./train_model/'
+            savepath='./train_NN/'
             if 'Y' in TRAIN:
                 np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=out,Y=fwdout)
             else:

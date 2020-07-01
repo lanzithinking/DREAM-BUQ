@@ -1,6 +1,8 @@
 """
 Analyze MCMC samples
 Shiwei Lan @ U of Warwick, 2016; @ Caltech, Sept. 2016
+------------------------------------------------------
+Modified for DREAM July 2020 @ ASU
 """
 
 import os
@@ -21,7 +23,7 @@ def restore_sample(mpi_comm,V,dir_name,f_name,num_samp):
     samp_f=df.Function(V,name="parameter")
     samp=np.zeros((num_samp,V.dim()))
     prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
-    for s in xrange(num_samp):
+    for s in range(num_samp):
         f.read(samp_f,'sample_{0}'.format(s))
         samp[s,]=samp_f.vector()
         if s+1 in prog:
@@ -36,19 +38,19 @@ def get_ESS(samp):
     return ESS
 
 if __name__ == '__main__':
-    from Elliptic_dili import Elliptic
+    from Elliptic import Elliptic
     # define the inverse problem
-    np.random.seed(2017)
-    SNR=100
+    np.random.seed(2020)
+    SNR=50
     elliptic = Elliptic(nx=40,ny=40,SNR=SNR)
     # algorithms
-    algs=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC','DILI','aDRinfmMALA','aDRinfmHMC')
-    alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','$DR-\infty$-mMALA','$DR-\infty$-mHMC','DILI','$aDR-\infty$-mMALA','$aDR-\infty$-mHMC')
+    algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
+    alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC')
     num_algs=len(algs)
     # preparation for estimates
     folder = './analysis_f_SNR'+str(SNR)
     fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
-    num_samp=2000
+    num_samp=5000
     
     # calculate ESS's
     ESS=np.zeros((num_algs,elliptic.pde.V.dim()))
@@ -64,7 +66,8 @@ if __name__ == '__main__':
                     _ESS_i=get_ESS(samp)
                     _ESS.append(_ESS_i)
                     found[a]=True
-                except:
+                except Exception as err:
+                    print(err)
                     pass
         if found[a]:
             ESS[a,]=np.mean(_ESS,axis=0)

@@ -1,6 +1,8 @@
 """
 Analyze MCMC samples
 Shiwei Lan @ U of Warwick, 2016
+-------------------------------
+Modified for DREAM July 2020 @ ASU
 """
 
 import os,pickle
@@ -167,7 +169,7 @@ class ana_samp(object):
         return object
 
 if __name__ == '__main__':
-    algs=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC','DILI','aDRinfmMALA','aDRinfmHMC')
+    algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
     print('Analyzing posterior samples ...\n')
-    SNR=100
+    SNR=50
     _=ana_samp(algs=algs,dir_name='analysis_f_SNR'+str(SNR),PLOT=False,save_fig=True).analyze()
