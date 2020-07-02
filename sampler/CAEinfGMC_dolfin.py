@@ -435,7 +435,7 @@ class CAEinfGMC:
         name_sampler = str(self.alg_name)
         try:
             sampler = getattr(self, name_sampler)
-        except AtributeError:
+        except AttributeError:
             print(self.alg_name, 'not found!')
         else:
             print('\nRunning '+self.alg_name+' now...\n')

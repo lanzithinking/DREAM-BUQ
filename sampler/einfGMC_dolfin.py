@@ -73,7 +73,7 @@ class einfGMC:
             v = self.model.post_Ga.sample()
         return v
         
-    def e_pCN(self):
+    def epCN(self):
         """
         preconditioned Crank-Nicolson
         """
@@ -104,7 +104,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def e_infMALA(self):
+    def einfMALA(self):
         """
         infinite dimensional Metropolis Adjusted Langevin Algorithm
         """
@@ -156,7 +156,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def e_infHMC(self):
+    def einfHMC(self):
         """
         infinite dimensional Hamiltonian Monte Carlo
         """
@@ -220,7 +220,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def e_DRinfmMALA(self):
+    def eDRinfmMALA(self):
         """
         dimension-reduced infinite dimensional manifold MALA
         """
@@ -273,7 +273,7 @@ class einfGMC:
         # return accept indicator
         return acpt,logr
 
-    def e_DRinfmHMC(self):
+    def eDRinfmHMC(self):
         """
         dimension-reduced infinite dimensional manifold HMC
         """
@@ -375,7 +375,7 @@ class einfGMC:
         name_sampler = str(self.alg_name)
         try:
             sampler = getattr(self, name_sampler)
-        except AtributeError:
+        except AttributeError:
             print(self.alg_name, 'not found!')
         else:
             print('\nRunning '+self.alg_name+' now...\n')

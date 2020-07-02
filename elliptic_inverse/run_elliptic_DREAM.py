@@ -39,7 +39,7 @@ def main():
     parser.add_argument('aeNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.1,.3,.2,None,None]) # AE [.4,.95,.4] # CAE [.1,]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.1,.3,.2,None,None]) # AE [.4,.95,.4] # CAE [.1,.3]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])

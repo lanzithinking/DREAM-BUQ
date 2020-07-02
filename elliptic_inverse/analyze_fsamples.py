@@ -100,7 +100,7 @@ class ana_samp(object):
             subprocess.call('./get_ESS.sh')
         else:
 #             sumry_ESS=np.array(np.loadtxt(ESS_fname,dtype={'names':('method','ESS_min','ESS_med','ESS_max'),'formats':('|S10',np.float,np.float,np.float)},delimiter=','))[None,]
-            sumry_ESS=np.array(np.genfromtxt(ESS_fname,dtype=np.dtype([('method','U11'),('ESS_min','<f8'),('ESS_med','<f8'),('ESS_max','<f8')]),delimiter=','),ndmin=1)
+            sumry_ESS=np.array(np.genfromtxt(ESS_fname,dtype=np.dtype([('method','U12'),('ESS_min','<f8'),('ESS_med','<f8'),('ESS_max','<f8')]),delimiter=','),ndmin=1)
         
         for a in range(self.num_algs):
             # samples' ESS
@@ -117,11 +117,8 @@ class ana_samp(object):
 #                         _,_,_,loglik,acpt,time=pickle.load(f,encoding='bytes') # Unpickling a python 2 object with python 3
 #                         _,_,_,_,_,soln_count,args=pickle.load(f,encoding='bytes')
                         f_read=pickle.load(f,encoding='bytes')
-                        stepsz=f_read[0 if any([s in self.algs[a] for s in ['DILI','aDRinf']]) else 1] # todo: DILI has two step sizes
-#                         stepsz=f_read[0]
-#                         adjuster=-(self.algs[a]=='DILI' or self.algs[a]=='aDRinfmMALA')+('aDRinfmHMC' in self.algs[a])
-                        adjuster=-(self.algs[a]=='DILI')+('aDRinf' in self.algs[a])
-                        loglik,acpt,time=f_read[adjuster+3:adjuster+6]
+                        stepsz=f_read[0]
+                        loglik,acpt,time=f_read[3:6]
                         f_read=pickle.load(f,encoding='bytes')
                         soln_count,args=f_read[5:7]
                         f.close()
@@ -135,7 +132,8 @@ class ana_samp(object):
             if found_a:
                 self.stepsize[a]=np.mean(_stepsz)
                 self.acptrate[a]=np.mean(_acpt)
-                num_samp=int(str(args).split("'num_samp'=")[-1].split(",")[0])
+#                 num_samp=int(str(args).split("'num_samp'=")[-1].split(",")[0])
+                num_samp=args.num_samp
                 self.spiter[a]=np.mean(_time)/num_samp
                 self.ESS[a,3]=np.mean(_ESS_l)
                 self.minESS_s[a]=self.ESS[a,0]/np.mean(_time)
@@ -158,7 +156,7 @@ class ana_samp(object):
         # summary table
         ESS_str=[np.array2string(ess_a,precision=2,separator=',').replace('[','').replace(']','') for ess_a in self.ESS]
         self.sumry_np=np.array([self.algs,self.stepsize,self.acptrate,self.spiter,ESS_str,self.minESS_s,self.spdup,self.PDEsolns]).T
-        sumry_header=('Method','h','AR','s/iter','ESS (min,med,max)','minESS/s','spdup','PDEsolns')
+        sumry_header=('Method','h','AR','s/iter','ESS (min,med,max, ll)','minESS/s','spdup','PDEsolns')
         self.sumry_pd=pd.DataFrame(data=self.sumry_np,columns=sumry_header)
 
         # save it to text

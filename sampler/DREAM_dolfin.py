@@ -94,7 +94,7 @@ class DREAM:
             v = self.model.post_Ga.sample()
         return v
     
-    def DREAM_pCN(self):
+    def DREAMpCN(self):
         """
         preconditioned Crank-Nicolson under DREAM framework
         """
@@ -134,7 +134,7 @@ class DREAM:
         # return accept indicator
         return acpt,logr
     
-    def DREAM_infMALA(self):
+    def DREAMinfMALA(self):
         """
         infinite dimensional Metropolis Adjusted Langevin Algorithm under DREAM framework
         """
@@ -195,7 +195,7 @@ class DREAM:
         # return accept indicator
         return acpt,logr
     
-    def DREAM_infHMC(self):
+    def DREAMinfHMC(self):
         """
         infinite dimensional Hamiltonian Monte Carlo under DREAM framework
         """
@@ -268,7 +268,7 @@ class DREAM:
         # return accept indicator
         return acpt,logr
 
-    def DREAM_infmMALA(self):
+    def DREAMinfmMALA(self):
         """
         dimension-reduced infinite dimensional manifold MALA under DREAM framework
         """
@@ -330,7 +330,7 @@ class DREAM:
         # return accept indicator
         return acpt,logr
 
-    def DREAM_infmHMC(self):
+    def DREAMinfmHMC(self):
         """
         dimension-reduced infinite dimensional manifold HMC under DREAM framework
         """
@@ -441,7 +441,7 @@ class DREAM:
         name_sampler = str(self.alg_name)
         try:
             sampler = getattr(self, name_sampler)
-        except AtributeError:
+        except AttributeError:
             print(self.alg_name, 'not found!')
         else:
             print('\nRunning '+self.alg_name+' now...\n')

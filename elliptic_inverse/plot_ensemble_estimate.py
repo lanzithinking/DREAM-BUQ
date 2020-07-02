@@ -62,13 +62,10 @@ folder = os.path.join(os.getcwd(),'analysis_f_SNR'+str(SNR))
 fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
 # plot ensembles
 import matplotlib.pyplot as plt
-import matplotlib as mp
-from util import matplot4dolfin
-matplot=matplot4dolfin()
 plt.rcParams['image.cmap'] = 'jet'
 
 num_rows=1
-fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((1+num_algs)/num_rows)),sharex=True,sharey=True,figsize=(12,4))
+fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((1+num_algs)/num_rows)),sharex=True,sharey=True,figsize=(16,4))
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
     if i==0:
@@ -78,8 +75,8 @@ for i,ax in enumerate(axes.flat):
             MAP=df.Function(elliptic.pde.V,name="parameter")
             f.read(MAP,"parameter")
             f.close()
-            sub_fig=matplot.plot(MAP)
-#             sub_fig=df.plot(MAP)
+            sub_fig=df.plot(MAP)
+            fig.colorbar(sub_fig,ax=ax)
             ax.set_title('MAP')
         except:
             pass
@@ -100,18 +97,12 @@ for i,ax in enumerate(axes.flat):
                 except:
                     pass
         if found:
-            sub_fig=matplot.plot(u_est)
-#             sub_fig=df.plot(u_est)
+            sub_fig=df.plot(u_est)
+            fig.colorbar(sub_fig,ax=ax)
         ax.set_title(algs[i-1])
     ax.set_aspect('auto')
 plt.axis([0, 1, 0, 1])
-
-# set color bar
-cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
-cbar=plt.colorbar(sub_fig, cax=cax,**kw)
-cbar.formatter.set_powerlimits((0, 0))
-cbar.update_ticks()
-# fig.colorbar(sub_fig, ax=axes.ravel().tolist(), shrink=0.42)
+plt.subplots_adjust(wspace=0.1, hspace=0)
 
 # save plots
 # fig.tight_layout(h_pad=1)

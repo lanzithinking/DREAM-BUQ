@@ -3,9 +3,9 @@
 ## Bayesian UQ with CNN and AutoEncoder (in preparation)
 
 ### software preparation
-* **FEniCS** [FEniCS](https://fenicsproject.org) Go to this [webpage](https://fenicsproject.org/download/) for installation.
+* [**FEniCS**](https://fenicsproject.org) Go to this [webpage](https://fenicsproject.org/download/) for installation.
 
-* ***TensorFlow** [TensorFlow](https://www.tensorflow.org) Go to this [webpage](https://www.tensorflow.org/install/pip) for installation.
+* [**TensorFlow**](https://www.tensorflow.org) Go to this [webpage](https://www.tensorflow.org/install/pip) for installation.
 
 * It is strongly **recommended** to use *Conda* to install FEniCS and *pip* to install TensorFlow. Load *FEniCS* environment in terminal session and include *TensorFlow* in PYTHONPATH for that session.
 
