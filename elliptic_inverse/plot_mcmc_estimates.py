@@ -166,6 +166,7 @@ for i,ax in enumerate(axes.flat):
                     samp_v.axpy(1.,u)
                     num_read+=1
                 f.close()
+                print(f_i+' has been read!')
                 found=True
             except:
                 pass
@@ -184,7 +185,7 @@ for i,ax in enumerate(axes.flat):
 # plt.colorbar(sub_fig, cax=cax, **kw)
 from util.common_colorbar import common_colorbar
 fig=common_colorbar(fig,axes,sub_figs)
-plt.subplots_adjust(wspace=0, hspace=0.2)
+plt.subplots_adjust(wspace=0.1, hspace=0.2)
 
 # save plot
 # fig.tight_layout()

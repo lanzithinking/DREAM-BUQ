@@ -506,7 +506,7 @@ class CAEinfGMC:
                 q_f=df.Function(self.model.prior.V)
 #                 q_f.vector()[:]=self.q
                 q_f.vector().set_local(self.q)
-                q_f.vector().apply('')
+                q_f.vector().apply('insert')
 #                 q_f.vector().zero()
 #                 q_f.vector().axpy(1.,self.q)
                 self.samp.write(q_f,'sample_{0}'.format(s-num_burnin))

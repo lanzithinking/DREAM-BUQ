@@ -19,7 +19,7 @@ def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
     if whitened:
         unknown=self.prior.v2u(unknown)
     
-    u_input={'DNN':unknown.get_local()[None,:], 'CNN':fun2img(vec2fun(unknown,bip.pde.V))[None,:,:,None]}[type(emulator).__name__]
+    u_input = {'DNN':unknown.get_local()[None,:], 'CNN':fun2img(vec2fun(unknown,bip.pde.V))[None,:,:,None]}[type(emulator).__name__]
     
     ll_f = lambda x: -0.5*bip.misfit.prec*tf.math.reduce_sum((emulator.model(x)-bip.misfit.obs)**2,axis=1)
     
@@ -27,7 +27,12 @@ def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
         loglik = ll_f(u_input).numpy()
     
     if any(s>=1 for s in geom_ord):
-        gradlik = img2fun(emulator.gradient(u_input, ll_f), bip.pde.V).vector()
+        gradlik_ = emulator.gradient(u_input, ll_f)
+#         gradlik = {'DNN':bip.prior.gen_vector(gradlik_), 'CNN':img2fun(gradlik_, bip.pde.V).vector()}[type(emulator).__name__] # not working
+        if type(emulator).__name__=='DNN':
+            gradlik = bip.prior.gen_vector(gradlik_)
+        elif type(emulator).__name__=='CNN':
+            gradlik = img2fun(gradlik_, bip.pde.V).vector()
         if whitened:
             gradlik = bip.prior.C_act(gradlik,.5,op='C',transp=True)
     

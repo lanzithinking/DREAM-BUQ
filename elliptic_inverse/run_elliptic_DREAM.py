@@ -72,14 +72,13 @@ def main():
     
     ##---- EMULATOR ----##
     # prepare for training data
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
-    Y=loaded['Y']
-    if args.emus[args.emuNO]=='cnn':
-        X=loaded['X']
+    if args.emus[args.emuNO]=='dnn':
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+        X=loaded['X']; Y=loaded['Y']
+    elif args.emus[args.emuNO]=='cnn':
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
+        X=loaded['X']; Y=loaded['Y']
         X=X[:,:,:,None]
-    elif args.emus[args.emuNO]=='dnn':
-        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
-        X=loaded['X']
     num_samp=X.shape[0]
 #     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
 #     te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)

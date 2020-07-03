@@ -43,9 +43,10 @@ x_test,y_test=X[n_tr:],Y[n_tr:]
 
 # define DNN
 depth=3
+# node_sizes=[elliptic.prior.dim,1024,512,128,len(elliptic.misfit.idx)]
 # activation='linear'
 # activation=tf.keras.layers.LeakyReLU(alpha=0.1)
-# activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.1),'output':'linear'}
+# activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.01),'output':'linear'}
 activations={'hidden':tf.math.sin,'output':'linear'}
 droprate=.4
 sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))

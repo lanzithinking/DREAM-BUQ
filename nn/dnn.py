@@ -10,7 +10,7 @@ Created June 17, 2020
 __author__ = "Shuyi Li; Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -30,7 +30,7 @@ class DNN:
         input_dim: the dimension of the input space
         output_dim: the dimension of the output space
         depth: the depth of the network
-        node_sizes: sizes of the nodes of the network
+        node_sizes: sizes of the nodes of the network, which can override depth
         droprate: the rate of Dropout
         activations: specification of activation functions, can be a list of strings or Keras activation layers
         kernel_initializers: kernel_initializers corresponding to activations
@@ -39,8 +39,10 @@ class DNN:
         self.output_dim=output_dim
         self.depth = depth
         self.node_sizes = kwargs.pop('node_sizes',None)
-        if self.node_sizes is None or np.size(self.node_sizes)!=self.depth+1:
+        if self.node_sizes is None:
             self.node_sizes = np.linspace(self.input_dim,self.output_dim,self.depth+1,dtype=np.int)
+        else:
+            self.depth=np.size(self.node_sizes)-1
         if self.node_sizes[0]!=self.input_dim or self.node_sizes[-1]!=self.output_dim:
             raise ValueError('Node sizes not matching input/output dimensions!')
         self.droprate = kwargs.pop('droprate',0)

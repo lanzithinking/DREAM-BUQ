@@ -31,6 +31,7 @@ def restore_sample(mpi_comm,V,dir_name,f_name,num_samp):
 #     f_read=lambda s: restore_each_sample(f,samp_f,s)
 #     samp=Parallel(n_jobs=4)(delayed(f_read)(i) for i in range(num_samp))
     f.close()
+    print(f_name+' has been read!')
     return samp
 
 def get_ESS(samp):

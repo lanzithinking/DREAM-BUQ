@@ -31,7 +31,7 @@ class AutoEncoder:
         dim: dimension of the original (input and output) space
         half_depth: the depth of the network of encoder and decoder if a symmetric structure is imposed (by default)
         latent_dim: the dimension of the latent space
-        node_sizes: sizes of the nodes of the network, which can overwrite half_depth and induce an asymmetric structure.
+        node_sizes: sizes of the nodes of the network, which can override half_depth and induce an asymmetric structure.
         activation: specification of activation functions, can be a string or a Keras activation layer
         kernel_initializer: kernel_initializer corresponding to activation
         """

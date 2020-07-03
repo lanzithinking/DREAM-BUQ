@@ -122,6 +122,7 @@ class ana_samp(object):
                         f_read=pickle.load(f,encoding='bytes')
                         soln_count,args=f_read[5:7]
                         f.close()
+                        print(f_i+' has been read!')
                         _,_ESS_l_i=self.cal_ESS(loglik[:,np.newaxis])
                         _stepsz.append(stepsz);_acpt.append(acpt);_time.append(time)
                         _ESS_l.append(_ESS_l_i[0])

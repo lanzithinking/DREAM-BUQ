@@ -18,6 +18,7 @@ from Elliptic import Elliptic
 # MCMC
 import sys
 sys.path.append( "../" )
+from nn.dnn import DNN
 from nn.cnn import CNN
 from sampler.einfGMC_dolfin import einfGMC
 
@@ -30,15 +31,17 @@ tf.random.set_seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
+    parser.add_argument('algNO', nargs='?', type=int, default=2)
+    parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.06,.3,.2,.4,.4])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.06,.25,.15,.4,.4])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['e'+a for a in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
+    parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
     args = parser.parse_args()
 
-    ## define the inverse elliptic problem ##
+    ##------ define the inverse elliptic problem ------##
     # parameters for PDE model
     nx=40;ny=40;
     # parameters for prior model
@@ -47,55 +50,69 @@ def main():
     SNR=50 # 100
     # define the inverse problem
     elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
-    # algorithms
+    
+    ##------ define networks ------##
+    # training data algorithms
     algs=['EKI','EKS']
     num_algs=len(algs)
     alg_no=1
-    
-    # define the emulator (CNN)
     # load data
     ensbl_sz = 500
     folder = './analysis_f_SNR'+str(SNR)
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
-    X=loaded['X']
-    Y=loaded['Y']
-    # pre-processing: scale X to 0-1
-#     X-=np.nanmin(X,axis=(1,2),keepdims=True) # try axis=(1,2,3)
-#     X/=np.nanmax(X,axis=(1,2),keepdims=True)
-    X=X[:,:,:,None]
-    # split train/test
+    
+    ##---- EMULATOR ----##
+    # prepare for training data
+    if args.emus[args.emuNO]=='dnn':
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+        X=loaded['X']; Y=loaded['Y']
+    elif args.emus[args.emuNO]=='cnn':
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
+        X=loaded['X']; Y=loaded['Y']
+        X=X[:,:,:,None]
     num_samp=X.shape[0]
+#     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+#     te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+#     x_train,x_test=X[tr_idx],X[te_idx]
     n_tr=np.int(num_samp*.75)
     x_train,y_train=X[:n_tr],Y[:n_tr]
     x_test,y_test=X[n_tr:],Y[n_tr:]
-    
-    # define CNN
-    num_filters=[16,8]
-    activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
-    latent_dim=128
-    droprate=.5
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
-            activations=activations, optimizer=optimizer)
-    f_name='cnn_'+algs[alg_no]+str(ensbl_sz)
+    # define emulator
+    if args.emus[args.emuNO]=='dnn':
+        depth=3
+        activations={'hidden':tf.math.sin,'output':'linear'}
+        droprate=.4
+        sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
+        kernel_initializers={'hidden':sin_init,'output':'he_uniform'}
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
+        emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
+                     activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
+    elif args.emus[args.emuNO]=='cnn':
+        num_filters=[16,8]
+        activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
+        latent_dim=128
+        droprate=.5
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
+        emulator=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
+                     activations=activations, optimizer=optimizer)
+    f_name=args.emus[args.emuNO]+'_'+algs[alg_no]+str(ensbl_sz)
+    # load emulator
     try:
-        cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
-    #     cnn.model.load_weights(os.path.join(folder,f_name+'.h5'))
+        emulator.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
         print(f_name+' has been loaded!')
-    except Exception as err:
-        print(err)
-        print('Train CNN...\n')
-        epochs=200
-        patience=0
-        import timeit
-        t_start=timeit.default_timer()
-        cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
-        t_used=timeit.default_timer()-t_start
-        print('\nTime used for training CNN: {}'.format(t_used))
-        # save CNN
-        cnn.model.save(os.path.join(folder,f_name+'.h5'))
-#         cnn.save(folder,f_name)
-    #     cnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
+    except:
+        try:
+            emulator.model.load_weights(os.path.join(folder,f_name+'.h5'))
+            print(f_name+' has been loaded!')
+        except:
+            print('\nNo emulator found. Training {}...\n'.format(args.emus[args.emuNO]))
+            epochs=200
+            patience=0
+            emulator.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
+            # save emulator
+            try:
+                emulator.model.save(os.path.join(folder,f_name+'.h5'))
+            except:
+                emulator.model.save_weights(os.path.join(folder,f_name+'.h5'))
     
     # initialization
 #     unknown=elliptic.prior.sample(whiten=False)
@@ -105,15 +122,15 @@ def main():
     print("Preparing %s sampler with step size %g for %d step(s)..."
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
-    emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic,cnn,geom_ord,whitened,**kwargs)
-    e_infGMC=einfGMC(unknown,elliptic,emul_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],k=5)
+    emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic,emulator,geom_ord,whitened,**kwargs)
+    e_infGMC=einfGMC(unknown,elliptic,emul_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO])#,k=5) # uncomment for manifold algorithms
     mc_fun=e_infGMC.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)
     
     # append PDE information including the count of solving
     filename_=os.path.join(e_infGMC.savepath,e_infGMC.filename+'.pckl')
-    filename=os.path.join(e_infGMC.savepath,'Elliptic_'+e_infGMC.filename+'.pckl') # change filename
+    filename=os.path.join(e_infGMC.savepath,'Elliptic_'+e_infGMC.filename+'_'+args.emus[args.emuNO]+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
 #     soln_count=[elliptic.soln_count,elliptic.pde.soln_count]
