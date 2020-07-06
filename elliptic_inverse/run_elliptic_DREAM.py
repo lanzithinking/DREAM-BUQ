@@ -80,12 +80,13 @@ def main():
         X=loaded['X']; Y=loaded['Y']
         X=X[:,:,:,None]
     num_samp=X.shape[0]
-#     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
-#     te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
-#     x_train,x_test=X[tr_idx],X[te_idx]
-    n_tr=np.int(num_samp*.75)
-    x_train,y_train=X[:n_tr],Y[:n_tr]
-    x_test,y_test=X[n_tr:],Y[n_tr:]
+#     n_tr=np.int(num_samp*.75)
+#     x_train,y_train=X[:n_tr],Y[:n_tr]
+#     x_test,y_test=X[n_tr:],Y[n_tr:]
+    tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+    te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+    x_train,x_test=X[tr_idx],X[te_idx]
+    y_train,y_test=Y[tr_idx],Y[te_idx]
     # define emulator
     if args.emus[args.emuNO]=='dnn':
         depth=3
@@ -97,9 +98,9 @@ def main():
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
                      activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
     elif args.emus[args.emuNO]=='cnn':
-        num_filters=[16,8]
-        activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
-        latent_dim=128
+        num_filters=[16,8,8]
+        activations={'conv':'softplus','latent':'softmax','output':'linear'}
+        latent_dim=256
         droprate=.5
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
         emulator=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
@@ -134,12 +135,12 @@ def main():
         X=loaded['X']
         X=X[:,:-1,:-1,None]
     num_samp=X.shape[0]
-#     tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
-#     te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
-#     x_train,x_test=X[tr_idx],X[te_idx]
-    n_tr=np.int(num_samp*.75)
-    x_train=X[:n_tr]
-    x_test=X[n_tr:]
+#     n_tr=np.int(num_samp*.75)
+#     x_train=X[:n_tr]
+#     x_test=X[n_tr:]
+    tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+    te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+    x_train,x_test=X[tr_idx],X[te_idx]
     # define autoencoder
     if args.aes[args.aeNO]=='ae':
         half_depth=3; latent_dim=elliptic_latent.pde.V.dim()

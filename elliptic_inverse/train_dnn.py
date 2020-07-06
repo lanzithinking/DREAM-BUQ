@@ -37,9 +37,13 @@ Y=loaded['Y']
 # X/=np.nanmax(X,axis=1,keepdims=True)
 # split train/test
 num_samp=X.shape[0]
-n_tr=np.int(num_samp*.75)
-x_train,y_train=X[:n_tr],Y[:n_tr]
-x_test,y_test=X[n_tr:],Y[n_tr:]
+# n_tr=np.int(num_samp*.75)
+# x_train,y_train=X[:n_tr],Y[:n_tr]
+# x_test,y_test=X[n_tr:],Y[n_tr:]
+tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+x_train,x_test=X[tr_idx],X[te_idx]
+y_train,y_test=Y[tr_idx],Y[te_idx]
 
 # define DNN
 depth=3

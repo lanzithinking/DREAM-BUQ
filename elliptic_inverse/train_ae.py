@@ -40,9 +40,13 @@ X=loaded['X']
 # X/=np.nanmax(X,axis=1,keepdims=True)
 # split train/test
 num_samp=X.shape[0]
-n_tr=np.int(num_samp*.75)
-x_train=X[:n_tr]
-x_test=X[n_tr:]
+# n_tr=np.int(num_samp*.75)
+# x_train=X[:n_tr]
+# x_test=X[n_tr:]
+tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+x_train,x_test=X[tr_idx],X[te_idx]
+
 
 # define AE
 half_depth=3; latent_dim=elliptic_latent.pde.V.dim()

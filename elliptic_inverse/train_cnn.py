@@ -40,16 +40,19 @@ Y=loaded['Y']
 X=X[:,:,:,None]
 # split train/test
 num_samp=X.shape[0]
-n_tr=np.int(num_samp*.75)
-x_train,y_train=X[:n_tr],Y[:n_tr]
-x_test,y_test=X[n_tr:],Y[n_tr:]
+# n_tr=np.int(num_samp*.75)
+# x_train,y_train=X[:n_tr],Y[:n_tr]
+# x_test,y_test=X[n_tr:],Y[n_tr:]
+tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+x_train,x_test=X[tr_idx],X[te_idx]
+y_train,y_test=Y[tr_idx],Y[te_idx]
 
 # define CNN
-num_filters=[16,8]
-activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
-# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
-# activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear'}
-latent_dim=128
+num_filters=[16,8,8]#[16,8]
+# activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
+activations={'conv':'softplus','latent':'softmax','output':'linear'}
+latent_dim=256#128
 droprate=.5
 # sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 # kernel_initializers={'conv':sin_init,'latent':sin_init,'output':'glorot_uniform'}
