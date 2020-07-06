@@ -10,7 +10,7 @@ Created June 17, 2020
 __author__ = "Shuyi Li; Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -67,7 +67,7 @@ class DNN:
                 output=activation(output)
             else:
                 output=Dense(units=self.node_sizes[i+1], activation=activation, kernel_initializer=ker_ini, name=layer_name)(output)
-            output=Dropout(rate=self.droprate)(output, training=self.droprate>0)
+            if self.droprate>0: output=Dropout(rate=self.droprate)(output)#, training=self.droprate>0) # this bug causes discrepancy between self.model(input).numpy() and self.evaluate(input)!
         return output
     
     def _custom_loss(self,loss_f):
