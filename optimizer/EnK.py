@@ -17,7 +17,7 @@ Modified April 22, 2020 @ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2017"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@caltech.edu; lanzithinking@gmail.com; slan@asu.edu"
 
@@ -62,7 +62,7 @@ class EnK(object):
         self.h=stp_sz
         self.r=nz_lvl
         self.tau=kwargs.pop('err_thld',.1) # default to be .1
-        self.reg=kwargs.pop('reg',False) # default to be false
+        self.reg=kwargs.pop('reg',False) # default to be false, cautious: initial regularization parameters are important!
         if self.reg:
             self.rho=kwargs.pop('reg_thld',0.5) # default to be 0.5
             self.tau=max(self.tau,1/self.rho) # tau >=1/rho
@@ -89,25 +89,26 @@ class EnK(object):
         p_tld=p-p_m
         C_pp=p_tld.T.dot(p_tld)/(self.J-1) # (m,m)
         C_up=self.u.T.dot(p_tld)/(self.J-1) # (D,m)
-        alpha={'EKI':1./self.h,'EKS':self.h}[self.alg]
+        alpha=1./self.h
         while self.reg and self.alg=='EKI':
             alpha*=2
             err_alpha=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p_m).T)
             if alpha*np.sqrt(err_alpha.T.dot(self.data['cov'].dot(err_alpha)))>=self.rho*err: break
         
-#         d=np.linalg.solve((self.alg=='EKI')*C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
-        d=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
+        d=np.linalg.solve((self.alg=='EKI')*C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
+#         d=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
 #         u_=self.u+(C_up.dot(d)).T
         
         if self.alg=='EKI':
+#             print(alpha)
 #             self.u=u_
             self.u+=(C_up.dot(d)).T
         elif self.alg=='EKS':
             C_uu=np.cov(self.u,rowvar=False)
-            if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
+            alpha=alpha/(np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps) if self.adpt else self.h
             print(alpha)
 #             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),u_.T).T
-            self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d/alpha*self.h)).T
+            self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d/self.h*alpha)).T
             self.u+=np.random.multivariate_normal(np.zeros(self.D),2*alpha*C_uu,self.J)
         
         return err,p
@@ -183,13 +184,17 @@ class EnK(object):
 # test
 if __name__=='__main__':
     np.random.seed(2020)
+    # example
+    ex={0:'linear', 1:'BBD'}[1]
     # generate data
     D=4; m=10
     u_truth=np.arange(D)-1
     u_truth[-1]=1
-    G=lambda u: np.sum(u.T[::2],axis=0)+np.sum(u.T[1::2]**2,axis=0) # BBD
-#     A=np.random.normal(size=(m,D)) # Linear
-#     G=lambda u: A.dot(u.T)
+    if ex=='linear':
+        A=np.random.normal(size=(m,D)) # Linear
+        G=lambda u: A.dot(u.T) # Linear
+    elif ex=='BBD':
+        G=lambda u: np.sum(u.T[::2],axis=0)+np.sum(u.T[1::2]**2,axis=0) # BBD
     Gamma=np.diag(np.random.rand(m))
     y=G(u_truth)+np.random.multivariate_normal(np.zeros(m),Gamma)
     data={'obs':y,'size':y.size,'cov':Gamma}
@@ -202,16 +207,15 @@ if __name__=='__main__':
     J=100
     u=prior['sample'](J)
     # parameters
-    stp_sz=[1,.01]
+    stp_sz=[1,.1]
     nz_lvl=1
     err_thld=1e-1
     
     #### EKI ####
     # define ensemble Kalman method
-    fwd_map=lambda u:np.tile(G(u)[:,None],m) # BBD
-#     fwd_map=lambda u:G(u).T # Linear
+    fwd_map=lambda u:{'linear':G(u).T, 'BBD':np.tile(G(u)[:,None],m)}[ex]
     alg='EKI'
-    eki=EnK(u,fwd_map,data,prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=alg,reg=True)
+    eki=EnK(u,fwd_map,data,prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=alg,reg=False)
     # run ensemble Kalman algorithm
     max_iter=100
     res_eki=eki.run(max_iter=max_iter)
@@ -229,15 +233,18 @@ if __name__=='__main__':
     import matplotlib.pyplot as plt
     plt_dim=[0,1]
     niter=min(res_eki[-2],res_eks[-2])+1
-    xmin=min(res_eki[3][:niter,:,plt_dim[0]].min(),res_eks[3][:niter,:,plt_dim[0]].min())
-    xmax=max(res_eki[3][:niter,:,plt_dim[0]].max(),res_eks[3][:niter,:,plt_dim[0]].max())
-    ymin=min(res_eki[3][:niter,:,plt_dim[1]].min(),res_eks[3][:niter,:,plt_dim[1]].min())
-    ymax=max(res_eki[3][:niter,:,plt_dim[1]].max(),res_eks[3][:niter,:,plt_dim[1]].max())
+#     plt.ion()
     for n in range(niter):
+        plt.clf()
         plt.subplot(121)
         plt.scatter(res_eki[3][n,:,plt_dim[0]],res_eki[3][n,:,plt_dim[1]],c='r',alpha=np.linspace(.2,.8,num=niter)[n])
         plt.subplot(122)
         plt.scatter(res_eks[3][n,:,plt_dim[0]],res_eks[3][n,:,plt_dim[1]],c='b',alpha=np.linspace(.2,.8,num=niter)[n])
+        plt.pause(1.0/100.0)
+    xmin=min(res_eki[3][:niter,:,plt_dim[0]].min(),res_eks[3][:niter,:,plt_dim[0]].min())
+    xmax=max(res_eki[3][:niter,:,plt_dim[0]].max(),res_eks[3][:niter,:,plt_dim[0]].max())
+    ymin=min(res_eki[3][:niter,:,plt_dim[1]].min(),res_eks[3][:niter,:,plt_dim[1]].min())
+    ymax=max(res_eki[3][:niter,:,plt_dim[1]].max(),res_eks[3][:niter,:,plt_dim[1]].max())
     plt.subplot(121)
     plt.xlabel(r'$u_{0}$'.format(plt_dim[0]+1)); plt.ylabel(r'$u_{0}$'.format(plt_dim[1]+1))
     plt.xlim(xmin,xmax); plt.ylim(ymin,ymax)

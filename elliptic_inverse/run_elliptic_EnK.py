@@ -62,7 +62,7 @@ def main():
     # run EnK to generate ensembles
     print("Preparing %s with step size %g ..."
           % (args.algs[args.algNO],args.step_sizes[args.algNO]))
-    ek=EnK(unknown,G,data,elliptic.prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,alg=args.algs[args.algNO],reg=True,adpt=True)
+    ek=EnK(unknown,G,data,elliptic.prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,alg=args.algs[args.algNO],adpt=True)
     ek_fun=ek.run
     ek_args=(args.max_iter,True)
     savepath,filename=ek_fun(*ek_args)

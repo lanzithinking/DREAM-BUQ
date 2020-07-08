@@ -17,7 +17,7 @@ This is specialized for FEniCS.
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -153,24 +153,24 @@ class EnK(object):
         C_pp=p_tld.T.dot(p_tld)/(self.J-1) # (m,m)
         C_up=MultiVector(self.u[0],self.data['size']) # C_up=0_{D x m}
         MvDSmatMult(self.u,p_tld/(self.J-1),C_up) # (D,m), C_up=u*p_tld/(J-1)
-        alpha={'EKI':1./self.h,'EKS':self.h}[self.alg]
+        alpha=1./self.h
         while self.reg and self.alg=='EKI':
             alpha*=2
             err_alpha=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p_m).T)
             if alpha*np.sqrt(err_alpha.T.dot(self.data['cov'].dot(err_alpha)))>=self.rho*err: break
         
-#         d=np.linalg.solve((self.alg=='EKI')*C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
-        d=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J), C_pp is present to stabilize the inverse
+        d=np.linalg.solve((self.alg=='EKI')*C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J)
+#         d=np.linalg.solve(C_pp+alpha*self.data['cov'],(y_eta-p).T) # (m,J), C_pp is present to stabilize the inverse
         
         if self.alg=='EKI':
             MvDSmatMult(C_up,d,self.u,True) # self.u+=C_up*d
         elif self.alg=='EKS':
-            if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
+            alpha=alpha/(np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps) if self.adpt else self.h
 #             print(alpha)
             
             u_=MultiVector(self.u) # copy u to u_
-#             MvDSmatMult(C_up,d/alpha*self.h,self.u,True) # u+=C_up*d
-            MvDSmatMult(C_up,d,self.u,True)
+            MvDSmatMult(C_up,d/self.h*alpha,self.u,True) # u+=C_up*d
+#             MvDSmatMult(C_up,d,self.u,True)
             implinop=_ImpLinOp(self.prior,u_,alpha)
             solver=implinop.get_solver()
             u_j=self.prior.gen_vector()
@@ -210,7 +210,7 @@ class EnK(object):
             u_f.vector().zero()
             u_f.vector().axpy(1.,self.u[j])
             ensbls.write(u_f,'iter{0}_ensbl{1}'.format(0,j))
-        uest_fname=self.alg+'_uest'+'_dim'+str(self.D)+'_'+ctime
+        uest_fname=self.alg+'_uest'+'_ensbl'+str(self.J)+'_dim'+str(self.D)+'_'+ctime
         u_est=df.HDF5File(self.prior.mpi_comm,os.path.join(fpath,uest_fname+".h5"),"w")
         # start the timer
         tic=timeit.default_timer()
