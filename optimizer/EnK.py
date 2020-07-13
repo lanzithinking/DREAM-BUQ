@@ -105,7 +105,7 @@ class EnK(object):
             self.u+=(C_up.dot(d)).T
         elif self.alg=='EKS':
             C_uu=np.cov(self.u,rowvar=False)
-            alpha=alpha/(np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps) if self.adpt else self.h
+            alpha=self.h/(np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))/self.h+self.eps) if self.adpt else self.h
             print(alpha)
 #             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),u_.T).T
             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d/self.h*alpha)).T
