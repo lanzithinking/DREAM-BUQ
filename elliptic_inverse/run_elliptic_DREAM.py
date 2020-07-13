@@ -34,12 +34,12 @@ tf.random.set_seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
-    parser.add_argument('aeNO', nargs='?', type=int, default=1)
+    parser.add_argument('aeNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.1,.3,.2,None,None]) # AE [.4,.95,.4] # CAE [.1,.3]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,2.5,1.5,None,None]) # AE [.3,2.5,1.5] # CAE [.06,.3]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -90,13 +90,11 @@ def main():
     # define emulator
     if args.emus[args.emuNO]=='dnn':
         depth=3
-        activations={'hidden':tf.math.sin,'output':'linear'}
+        activations={'hidden':'softplus','output':'linear'}
         droprate=.4
-        sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-        kernel_initializers={'hidden':sin_init,'output':'he_uniform'}
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
-                     activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
+                     activations=activations, optimizer=optimizer)
     elif args.emus[args.emuNO]=='cnn':
         num_filters=[16,8,8]
         activations={'conv':'softplus','latent':'softmax','output':'linear'}
@@ -128,7 +126,7 @@ def main():
     ##---- AUTOENCODER ----##
     # prepare for training data
     if args.aes[args.aeNO]=='ae':
-        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
         X=loaded['X']
     elif args.aes[args.aeNO]=='cae':
         loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))

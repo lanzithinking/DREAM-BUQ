@@ -19,6 +19,7 @@ from nn.ae import AutoEncoder
 from nn.cae import ConvAutoEncoder
 from tensorflow.keras.models import load_model
 from util.dolfin_gadget import vec2fun,fun2img,img2fun
+from util.multivector import *
 
 # functions needed to make even image size
 def pad(A,width=[1]):
@@ -59,7 +60,7 @@ folder = './analysis_f_SNR'+str(SNR)
 AE={0:'ae',1:'cae'}[0]
 # prepare for training data
 if AE=='ae':
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
     X=loaded['X']
 elif AE=='cae':
     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
@@ -114,10 +115,77 @@ num_algs=len(algs)
 fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
 num_samp=5000
 prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
+# obtain estimates
+mean_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
+std_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
+if os.path.exists(os.path.join(folder,'mcmc_mean.h5')) and os.path.exists(os.path.join(folder,'mcmc_std.h5')):
+    samp_f=df.Function(elliptic.pde.V,name="mv")
+    with df.HDF5File(elliptic.pde.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"r") as f:
+        for i in range(num_algs):
+            f.read(samp_f,algs[i])
+            mean_v[i].set_local(samp_f.vector())
+    with df.HDF5File(elliptic.pde.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"r") as f:
+        for i in range(num_algs):
+            f.read(samp_f,algs[i])
+            std_v[i].set_local(samp_f.vector())
+else:
+    for i in range(num_algs):
+        print('Getting estimates for '+algs[i]+' algorithm...')
+        bip=elliptic_latent if 'DREAM' in algs[i] else elliptic
+        # calculate posterior estimates
+        found=False
+        samp_f=df.Function(bip.pde.V,name="parameter")
+        samp_mean=elliptic.prior.gen_vector(); samp_mean.zero()
+        samp_std=elliptic.prior.gen_vector(); samp_std.zero()
+        num_read=0
+        for f_i in fnames:
+            if '_'+algs[i]+'_' in f_i:
+                try:
+                    f=df.HDF5File(bip.pde.mpi_comm,os.path.join(folder,f_i),"r")
+                    samp_mean.zero(); samp_std.zero(); num_read=0
+                    for s in range(num_samp):
+                        if s+1 in prog:
+                            print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
+                        f.read(samp_f,'sample_{0}'.format(s))
+    #                     f.read(samp_f.vector(),'/VisualisationVector/{0}'.format(s),False)
+                        if 'DREAM' in algs[i]:
+                            if AE=='ae':
+                                u_latin=samp_f.vector().get_local()[None,:]
+                                u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
+                            elif AE=='cae':
+                                u_latin=fun2img(vec2fun(samp_f.vector(), elliptic_latent.pde.V))
+                                width=tuple(np.mod(i,2) for i in u_latin.shape)
+                                u_latin=chop(u_latin,width)[None,:,:,None]
+                                u=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),elliptic.pde.V).vector()
+                        else:
+                            u=samp_f.vector()
+                        samp_mean.axpy(1.,u)
+                        samp_std.axpy(1.,u*u)
+                        num_read+=1
+                    f.close()
+                    print(f_i+' has been read!')
+                    found=True
+                except:
+                    pass
+        if found:
+            samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
+            mean_v[i].set_local(samp_mean)
+            std_v[i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
+    # save
+    samp_f=df.Function(elliptic.pde.V,name="mv")
+    with df.HDF5File(elliptic.pde.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"w") as f:
+        for i in range(num_algs):
+            samp_f.vector().set_local(mean_v[i])
+            f.write(samp_f,algs[i])
+    with df.HDF5File(elliptic.pde.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"w") as f:
+        for i in range(num_algs):
+            samp_f.vector().set_local(std_v[i])
+            f.write(samp_f,algs[i])
 
 # plot
 plt.rcParams['image.cmap'] = 'jet'
 num_rows=3
+# posterior mean
 fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,10))
 sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
@@ -134,61 +202,37 @@ for i,ax in enumerate(axes.flat):
 #         except:
 #             pass
 #     elif 1<=i<=num_algs:
-    print('Getting estimates for '+algs[i]+' algorithm...')
-    bip=elliptic_latent if 'DREAM' in algs[i] else elliptic
-    # plot posterior mean
-    found=False
-    samp_f=df.Function(bip.pde.V,name="parameter")
-    samp_v=elliptic.prior.gen_vector()
-    samp_v.zero()
-    num_read=0
-    for f_i in fnames:
-        if '_'+algs[i]+'_' in f_i:
-            try:
-                f=df.HDF5File(bip.pde.mpi_comm,os.path.join(folder,f_i),"r")
-                samp_v.zero()
-                for s in range(num_samp):
-                    if s+1 in prog:
-                        print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
-                    f.read(samp_f,'sample_{0}'.format(s))
-#                     f.read(samp_f.vector(),'/VisualisationVector/{0}'.format(s),False)
-                    if 'DREAM' in algs[i]:
-                        if AE=='ae':
-                            u_latin=samp_f.vector().get_local()[None,:]
-                            u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
-                        elif AE=='cae':
-                            u_latin=fun2img(vec2fun(samp_f.vector(), elliptic_latent.pde.V))
-                            width=tuple(np.mod(i,2) for i in u_latin.shape)
-                            u_latin=chop(u_latin,width)[None,:,:,None]
-                            u=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),elliptic.pde.V).vector()
-                    else:
-                        u=samp_f.vector()
-                    samp_v.axpy(1.,u)
-                    num_read+=1
-                f.close()
-                print(f_i+' has been read!')
-                found=True
-            except:
-                pass
-    if found:
-        samp_mean=samp_v/num_read
-        if 'DREAM' in algs[i]:
-            samp_f=df.Function(elliptic.pde.V,name="parameter")
-        samp_f.vector()[:]=samp_mean
-        sub_figs[i]=df.plot(samp_f)
-        ax.set_title(alg_names[i])
+    sub_figs[i]=df.plot(vec2fun(mean_v[i],elliptic.pde.V))
+    ax.set_title(alg_names[i])
     ax.set_aspect('auto')
     plt.axis([0, 1, 0, 1])
-
 # set color bar
 # cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
 # plt.colorbar(sub_fig, cax=cax, **kw)
 from util.common_colorbar import common_colorbar
 fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.1, hspace=0.2)
-
 # save plot
 # fig.tight_layout()
-plt.savefig(folder+'/mean_estimates.png',bbox_inches='tight')
+plt.savefig(folder+'/mcmc_estimates_mean.png',bbox_inches='tight')
+# plt.show()
 
-plt.show()
+# posterior std
+fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,10))
+sub_figs = [None]*len(axes.flat)
+for i,ax in enumerate(axes.flat):
+    plt.axes(ax)
+    sub_figs[i]=df.plot(vec2fun(std_v[i],elliptic.pde.V))
+    ax.set_title(alg_names[i])
+    ax.set_aspect('auto')
+    plt.axis([0, 1, 0, 1])
+# set color bar
+# cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
+# plt.colorbar(sub_fig, cax=cax, **kw)
+from util.common_colorbar import common_colorbar
+fig=common_colorbar(fig,axes,sub_figs)
+plt.subplots_adjust(wspace=0.1, hspace=0.2)
+# save plot
+# fig.tight_layout()
+plt.savefig(folder+'/mcmc_estimates_std.png',bbox_inches='tight')
+# plt.show()

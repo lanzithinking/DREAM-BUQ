@@ -107,47 +107,49 @@ except Exception as err:
     cae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
     cae.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
-# # plot
-# import matplotlib.pyplot as plt
-# fig = plt.figure(figsize=(15,5), facecolor='white')
-# plt.ion()
-# # plt.show(block=True)
-# u_f = df.Function(elliptic.pde.V)
-# u_f_lat = df.Function(elliptic_latent.pde.V)
-# for n in range(20):
-#     u=elliptic.prior.sample()
-#     # encode
-#     u_f.vector().set_local(u)
-#     u_encoded=cae.encode(fun2img(u_f)[None,:-1,:-1,None])
-#     # decode
-#     u_decoded=cae.decode(u_encoded)
-# #     u_decoded=cae.model.predict(fun2img(u_f)[None,:-1,:-1,None])
-#     
-#     # compute the log-volumes
-# #     logvol_enc=cae.logvol(fun2img(u_f)[None,:-1,:-1,None],'encode')
-# #     print('Log-volume of encoder: {}'.format(logvol_enc))
-# #     logvol_dec=cae.logvol(u_encoded,'decode')
-# #     print('Log-volume of decoder: {}'.format(logvol_dec))
-#     
-#     # plot
-#     plt.subplot(131)
-#     u_f.vector().set_local(u)
-#     df.plot(u_f)
-#     plt.title('Original Sample')
-#     plt.subplot(132)
-#     u_f_lat.vector().set_local(u_encoded.flatten())
-#     df.plot(u_f_lat)
-#     plt.title('Latent Sample')
-#     plt.subplot(133)
-#     u_decoded=np.squeeze(u_decoded)
+# plot
+import matplotlib.pyplot as plt
+fig = plt.figure(figsize=(15,5), facecolor='white')
+plt.ion()
+# plt.show(block=True)
+u_f = df.Function(elliptic.pde.V)
+u_f_lat = df.Function(elliptic_latent.pde.V)
+for n in range(20):
+    u=elliptic.prior.sample()
+    # encode
+    u_f.vector().set_local(u)
+    u_encoded=cae.encode(chop(fun2img(u_f))[None,:,:,None])
+    # decode
+    u_decoded=cae.decode(u_encoded)
+#     u_decoded=cae.model.predict(chop(fun2img(u_f))[None,:,:,None])
+     
+    # compute the log-volumes
+#     logvol_enc=cae.logvol(chop(fun2img(u_f))[None,:,:,None],'encode')
+#     print('Log-volume of encoder: {}'.format(logvol_enc))
+#     logvol_dec=cae.logvol(u_encoded,'decode')
+#     print('Log-volume of decoder: {}'.format(logvol_dec))
+     
+    # plot
+    plt.subplot(131)
+    u_f.vector().set_local(u)
+    df.plot(u_f)
+    plt.title('Original Sample')
+    plt.subplot(132)
+    if activations['latent'] is None:
+        u_f_lat=img2fun(pad(np.squeeze(u_encoded)),elliptic_latent.pde.V)
+    else:
+        u_f_lat.vector().set_local(u_encoded.flatten())
+#         u_f_lat=img2fun(u_encoded.reshape((nx+1,ny+1)),elliptic_latent.pde.V)
+    df.plot(u_f_lat)
+    plt.title('Latent Sample')
+    plt.subplot(133)
+    u_decoded=np.squeeze(u_decoded)
 #     u_decoded*=X_max; u_decoded+=X_min
-#     u_decoded1=np.zeros([i+1 for i in u_decoded.shape])
-#     u_decoded1[:-1,:-1]=u_decoded
-#     u_f=img2fun(u_decoded1,elliptic.pde.V)
-#     df.plot(u_f)
-#     plt.title('Reconstructed Sample')
-#     plt.draw()
-#     plt.pause(1.0/10.0)
+    u_f=img2fun(pad(u_decoded),elliptic.pde.V)
+    df.plot(u_f)
+    plt.title('Reconstructed Sample')
+    plt.draw()
+    plt.pause(1.0/10.0)
 
 # read data and construct plot functions
 u_f = df.Function(elliptic.pde.V)
@@ -161,7 +163,7 @@ except:
     pass
 u=u_f.vector()
 # encode
-u_encoded=cae.encode(fun2img(u_f)[None,:-1,:-1,None])
+u_encoded=cae.encode(chop(fun2img(u_f))[None,:,:,None])
 # decode
 u_decoded=cae.decode(u_encoded)
 
@@ -179,9 +181,11 @@ sub_figs[0]=df.plot(u_f)
 # sub_figs[0]=plt.imshow(fun2img(u_f),origin='lower')
 plt.title('Original')
 plt.axes(axes.flat[1])
-# u_f_lat.vector().set_local(u_encoded.flatten())
-# u_f_lat=img2fun(u_encoded.reshape((nx+1,ny+1)),elliptic_latent.pde.V)
-u_f_lat=img2fun(pad(np.squeeze(u_encoded)),elliptic_latent.pde.V)
+if activations['latent'] is None:
+    u_f_lat=img2fun(pad(np.squeeze(u_encoded)),elliptic_latent.pde.V)
+else:
+    u_f_lat.vector().set_local(u_encoded.flatten())
+#     u_f_lat=img2fun(u_encoded.reshape((nx+1,ny+1)),elliptic_latent.pde.V)
 sub_figs[1]=df.plot(u_f_lat)
 # sub_figs[1]=plt.imshow(u_encoded.reshape((nx+1,ny+1)),origin='lower')
 plt.title('Latent')

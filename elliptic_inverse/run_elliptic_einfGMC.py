@@ -35,7 +35,7 @@ def main():
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.05,.15,.1,.4,.4])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.05,.15,.1,None,None])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['e'+a for a in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -80,13 +80,11 @@ def main():
     # define emulator
     if args.emus[args.emuNO]=='dnn':
         depth=3
-        activations={'hidden':tf.math.sin,'output':'linear'}
+        activations={'hidden':'softplus','output':'linear'}
         droprate=.4
-        sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-        kernel_initializers={'hidden':sin_init,'output':'he_uniform'}
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
-                     activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
+                     activations=activations, optimizer=optimizer)
     elif args.emus[args.emuNO]=='cnn':
         num_filters=[16,8,8]
         activations={'conv':'softplus','latent':'softmax','output':'linear'}

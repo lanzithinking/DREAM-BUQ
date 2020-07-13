@@ -98,9 +98,9 @@ class ana_samp(object):
         if not os.path.isfile(ESS_fname):
             import subprocess
             subprocess.call('./get_ESS.sh')
-        else:
+#         else:
 #             sumry_ESS=np.array(np.loadtxt(ESS_fname,dtype={'names':('method','ESS_min','ESS_med','ESS_max'),'formats':('|S10',np.float,np.float,np.float)},delimiter=','))[None,]
-            sumry_ESS=np.array(np.genfromtxt(ESS_fname,dtype=np.dtype([('method','U12'),('ESS_min','<f8'),('ESS_med','<f8'),('ESS_max','<f8')]),delimiter=','),ndmin=1)
+        sumry_ESS=np.array(np.genfromtxt(ESS_fname,dtype=np.dtype([('method','U12'),('ESS_min','<f8'),('ESS_med','<f8'),('ESS_max','<f8')]),delimiter=','),ndmin=1)
         
         for a in range(self.num_algs):
             # samples' ESS
