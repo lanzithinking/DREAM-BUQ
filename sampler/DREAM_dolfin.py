@@ -9,7 +9,7 @@ Originally created June 28, 2020 @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -29,8 +29,7 @@ def chop(A):
         A_chopped=A_chopped[:,:-1]
     return A_chopped
 
-prep4dec = lambda u, V, ae_type: {'AutoEncoder': u.get_local()[None,:],
-                                  'ConvAutoEncoder': chop(fun2img(vec2fun(u,V)))[None,:,:,None]}[ae_type] # chop image to have even dimensions
+prep4dec = lambda u, V, ae_type: chop(fun2img(vec2fun(u,V)))[None,:,:,None] if 'Conv' in ae_type else u.get_local()[None,:] # chop image to have even dimensions
 
 class DREAM:
     """

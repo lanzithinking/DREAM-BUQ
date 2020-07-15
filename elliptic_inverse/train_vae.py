@@ -40,11 +40,14 @@ X=loaded['X']
 # X/=np.nanmax(X,axis=1,keepdims=True)
 # split train/test
 num_samp=X.shape[0]
-n_tr=np.int(num_samp*.75)
-x_train=X[:n_tr]
-x_test=X[n_tr:]
+# n_tr=np.int(num_samp*.75)
+# x_train=X[:n_tr]
+# x_test=X[n_tr:]
+tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+x_train,x_test=X[tr_idx],X[te_idx]
 
-# define AE
+# define VAE
 half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
 repatr_out=False
 # activation='linear'
@@ -76,7 +79,7 @@ except Exception as err:
     t_start=timeit.default_timer()
     vae.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
     t_used=timeit.default_timer()-t_start
-    print('\nTime used for training AE: {}'.format(t_used))
+    print('\nTime used for training VAE: {}'.format(t_used))
     # save VAE
     vae.model.save(os.path.join(folder,f_name[0]+'.h5'))
     vae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))

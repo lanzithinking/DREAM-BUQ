@@ -39,7 +39,7 @@ def main():
     parser.add_argument('aeNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,2.5,1.5,None,None]) # AE [.3,2.5,1.5] # CAE [.06,.3]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.1,2.5,1.5,None,None]) # AE [.3,2.5,1.5] # CAE [.06,.3]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -125,13 +125,13 @@ def main():
     
     ##---- AUTOENCODER ----##
     # prepare for training data
-    if args.aes[args.aeNO]=='ae':
-        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
-        X=loaded['X']
-    elif args.aes[args.aeNO]=='cae':
-        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
+    if 'c' in args.aes[args.aeNO]:
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_Ximg.npz'))
         X=loaded['X']
         X=X[:,:-1,:-1,None]
+    else:
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
+        X=loaded['X']
     num_samp=X.shape[0]
 #     n_tr=np.int(num_samp*.75)
 #     x_train=X[:n_tr]
@@ -142,7 +142,8 @@ def main():
     # define autoencoder
     if args.aes[args.aeNO]=='ae':
         half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
-        activation='linear'
+#         activation='linear'
+        activation=tf.keras.layers.LeakyReLU(alpha=2.)
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
         autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                                 activation=activation, optimizer=optimizer)
@@ -166,7 +167,8 @@ def main():
         print('\nNo autoencoder found. Training {}...\n'.format(args.aes[args.aeNO]))
         epochs=200
         patience=0
-        autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
+        noise=.5
+        autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience,noise=noise)
         # save autoencoder
         autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
         autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))

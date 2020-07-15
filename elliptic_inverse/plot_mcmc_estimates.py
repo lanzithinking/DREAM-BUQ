@@ -59,24 +59,25 @@ folder = './analysis_f_SNR'+str(SNR)
 ##---- AUTOENCODER ----##
 AE={0:'ae',1:'cae'}[0]
 # prepare for training data
-if AE=='ae':
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
-    X=loaded['X']
-elif AE=='cae':
+if 'c' in AE:
     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
     X=loaded['X']
     X=X[:,:-1,:-1,None]
+else :
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+    X=loaded['X']
 num_samp=X.shape[0]
-# tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
-# te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
-# x_train,x_test=X[tr_idx],X[te_idx]
-n_tr=np.int(num_samp*.75)
-x_train=X[:n_tr]
-x_test=X[n_tr:]
+# n_tr=np.int(num_samp*.75)
+# x_train=X[:n_tr]
+# x_test=X[n_tr:]
+tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+x_train,x_test=X[tr_idx],X[te_idx]
 # define autoencoder
 if AE=='ae':
     half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
-    activation='linear'
+#     activation='linear'
+    activation=tf.keras.layers.LeakyReLU(alpha=2.)
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
     autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                             activation=activation, optimizer=optimizer)
@@ -100,7 +101,8 @@ except:
     print('\nNo autoencoder found. Training {}...\n'.format(AE))
     epochs=200
     patience=0
-    autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
+    noise=.5
+    autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience,noise=noise)
     # save autoencoder
     autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
     autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
@@ -149,14 +151,14 @@ else:
                         f.read(samp_f,'sample_{0}'.format(s))
     #                     f.read(samp_f.vector(),'/VisualisationVector/{0}'.format(s),False)
                         if 'DREAM' in algs[i]:
-                            if AE=='ae':
-                                u_latin=samp_f.vector().get_local()[None,:]
-                                u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
-                            elif AE=='cae':
+                            if 'c' in AE:
                                 u_latin=fun2img(vec2fun(samp_f.vector(), elliptic_latent.pde.V))
                                 width=tuple(np.mod(i,2) for i in u_latin.shape)
                                 u_latin=chop(u_latin,width)[None,:,:,None]
                                 u=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),elliptic.pde.V).vector()
+                            else:
+                                u_latin=samp_f.vector().get_local()[None,:]
+                                u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
                         else:
                             u=samp_f.vector()
                         samp_mean.axpy(1.,u)

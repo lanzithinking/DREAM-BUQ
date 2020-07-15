@@ -10,7 +10,7 @@ Created June 4, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -74,7 +74,17 @@ class AutoEncoder:
             L+=loss_f(self.encoder(y_true),y_pred) # potential on latent space: likelihood
             return L
         return loss
-        
+    
+    def _contrative_loss(self,lambda_=1):
+        """
+        Loss of contractive autoencoder
+        """
+        def loss(y_true, y_pred):
+            L=tf.keras.losses.MSE(y_true, y_pred)
+            L+=lambda_*tf.reduce_sum(self.batch_jacobian(input=y_true,coding='encode')**2,axis=[1,2])
+            return L
+        return loss
+    
     def build(self,**kwargs):
         """
         Set up the network structure and compile the model with optimizer, loss and metrics.
@@ -97,8 +107,9 @@ class AutoEncoder:
         # compile model
         optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
+        lambda_ = kwargs.pop('lambda',1.)
         metrics = kwargs.pop('metrics',['mae'])
-        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else loss, metrics=metrics, **kwargs)
+        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else self._contrative_loss(lambda_) if loss=='contractive' else loss, metrics=metrics, **kwargs)
     
     def train(self, x_train, x_test=None, epochs=100, batch_size=32, verbose=0, **kwargs):
         """
@@ -110,9 +121,12 @@ class AutoEncoder:
             te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
             x_test = x_train[te_idx]
             x_train = x_train[tr_idx]
+        # corrupt input training data, for denoising autoencoder (DAE)
+        noise = kwargs.pop('noise',0)
+        x_train_ = noise(x_train) if callable(noise) else x_train + tf.random.normal(x_train.shape,stddev=noise)
         patience = kwargs.pop('patience',0)
         es = EarlyStopping(monitor='loss', mode='auto', verbose=1, patience=patience)
-        self.history = self.model.fit(x_train, x_train,
+        self.history = self.model.fit(x_train_, x_train,
                                       validation_data=(x_test, x_test),
                                       epochs=epochs,
                                       batch_size=batch_size,
@@ -158,6 +172,27 @@ class AutoEncoder:
         except:
             jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
+    
+    def batch_jacobian(self, input=None, coding='encode'):
+        """
+        Obtain Jacobian matrix of encoder (coding encode) or decoder (coding decode)
+        ------------------------------------------
+        Note: when using model input, it has to run with eager execution disabled in TF v2.2.0
+        """
+        model = getattr(self,coding+'r')
+        if input is None:
+            x = model.input
+        else:
+#             x = tf.constant(input)
+            x = tf.Variable(input, trainable=True, dtype=tf.float32)
+        with tf.GradientTape(persistent=True) as g:
+            g.watch(x)
+            y = model(x)
+        try:
+            jac = g.batch_jacobian(y,x)
+        except:
+            jac = g.batch_jacobian(y,x,experimental_use_pfor=False)
+        return jac# if input is None else np.squeeze(jac.numpy())
     
     def logvol(self, input, coding='encode'):
         """

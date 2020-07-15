@@ -38,15 +38,15 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
 #         unknown_lat=bip_lat.prior.v2u(unknown_lat)
     
 #     u_latin={'AutoEncoder':unknown_lat.get_local()[None,:],'ConvAutoEncoder':chop(fun2img(vec2fun(unknown_lat, V_lat)))[None,:,:,None]}[type(autoencoder).__name__]
-    if type(autoencoder).__name__=='AutoEncoder':
-        u_latin=unknown_lat.get_local()[None,:]
-        unknown=df.Function(V).vector()
-        unknown.set_local(autoencoder.decode(u_latin).flatten())
-    elif type(autoencoder).__name__=='ConvAutoEncoder':
+    if 'Conv' in type(autoencoder).__name__:
         u_latin=fun2img(vec2fun(unknown_lat, V_lat))
         width=tuple(np.mod(i,2) for i in u_latin.shape)
         u_latin=chop(u_latin,width)[None,:,:,None]
         unknown=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),V).vector()
+    else:
+        u_latin=unknown_lat.get_local()[None,:]
+        unknown=df.Function(V).vector()
+        unknown.set_local(autoencoder.decode(u_latin).flatten())
     
     emul_geom=kwargs.pop('emul_geom',None)
     full_geom=kwargs.pop('full_geom',None)
@@ -67,7 +67,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     
     if any(s>=1 for s in geom_ord):
         jac_=autoencoder.jacobian(u_latin,'decode')
-        if type(autoencoder).__name__=='ConvAutoEncoder':
+        if 'Conv' in type(autoencoder).__name__:
 # #             jac__=np.zeros(jac_.shape[:2]+tuple(i+1 for i in jac_.shape[2:]))
 # #             jac__[:,:,:-1,:-1]=jac_; jac_=jac__
 #             jac_=pad(jac_,(0,)*2+width)
@@ -75,11 +75,11 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
 #             d2v = df.dof_to_vertex_map(V_lat)
 #             jac_=jac_[:,:,d2v]
 #         jac=MultiVector(unknown,V_lat.dim())
-# #         [jac[i].set_local({'AutoEncoder':jac_[:,i],'ConvAutoEncoder':img2fun(pad(jac_[:,:,i]), V).vector()}[type(autoencoder).__name__]) for i in range(V_lat.dim())] # not working: too many indices?
-#         if type(autoencoder).__name__=='AutoEncoder':
-#             [jac[i].set_local(jac_[:,i]) for i in range(V_lat.dim()) for i in range(V_lat.dim())] # for loop is too slow
-#         elif type(autoencoder).__name__=='ConvAutoEncoder':
+# #         [jac[i].set_local(img2fun(pad(jac_[:,:,i]), V).vector() if 'Conv' in type(autoencoder).__name__ else jac_[:,i]) for i in range(V_lat.dim())] # not working: too many indices?
+#         if 'Conv' in type(autoencoder).__name__:
 #             [jac[i].set_local(img2fun(pad(jac_[:,:,i],width), V).vector()) for i in range(V_lat.dim())] # for loop is too slow
+#         else:
+#             [jac[i].set_local(jac_[:,i]) for i in range(V_lat.dim()) for i in range(V_lat.dim())] # for loop is too slow
 #         gradlik_=jac.dot(gradlik)
             jac_=pad(jac_,width*2)
             jac_=jac_.reshape((np.prod(jac_.shape[:2]),np.prod(jac_.shape[2:])))
