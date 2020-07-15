@@ -40,7 +40,7 @@ Y=loaded['Y']
 X=X[:,:,:,None]
 # split train/test
 num_samp=X.shape[0]
-n_tr=np.int(num_samp*.75)
+# n_tr=np.int(num_samp*.75)
 # x_train,y_train=X[:n_tr],Y[:n_tr]
 # x_test,y_test=X[n_tr:],Y[n_tr:]
 tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
@@ -49,11 +49,11 @@ x_train,x_test=X[tr_idx],X[te_idx]
 y_train,y_test=Y[tr_idx],Y[te_idx]
 
 # define CNN
-num_filters=[16,8]
-activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear'}
-# activations={'conv':'linear','latent':tf.keras.layers.PReLU(),'output':'linear'}
+num_filters=[16,8,8]
+activations={'conv':'softplus','latent':'softmax','output':'linear'}
+# activations={'conv':'elu','latent':tf.keras.layers.PReLU(),'output':'linear'}
 # activations={'conv':'relu','latent':tf.math.sin,'output':tf.keras.layers.PReLU()}
-latent_dim=128
+latent_dim=256
 droprate=.5
 # sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 # kernel_initializers={'conv':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
@@ -64,11 +64,11 @@ cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim
 loglik = lambda y: -0.5*elliptic.misfit.prec*tf.math.reduce_sum((y-elliptic.misfit.obs)**2,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), elliptic.misfit.prec*(y_true-y_pred)]
 # cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
-#         activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer, loss=custom_loss)
+#         activations=activations, optimizer=optimizer, loss=custom_loss)
 folder='./saved_model'
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+ctime
+f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime
 try:
 #     cnn.model=load_model(os.path.join(folder,f_name+'.h5'))
 #     cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
