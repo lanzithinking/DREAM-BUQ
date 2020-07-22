@@ -8,6 +8,7 @@ Modified for DREAM June 2020 @ ASU
 # modules
 import os,argparse,pickle
 import numpy as np
+# on mac import dolfin then import tensorflow; reverse the order on linux -- it is a known issue on for FEniCS-2019.1 and TensorFlow-2.2
 import dolfin as df
 import tensorflow as tf
 from tensorflow.keras.models import load_model
@@ -22,12 +23,15 @@ from nn.dnn import DNN
 from nn.cnn import CNN
 from nn.ae import AutoEncoder
 from nn.cae import ConvAutoEncoder
+from nn.vae import VAE
 from sampler.DREAM_dolfin import DREAM
 
 # relevant geometry
 import geom_emul
 from geom_latent import *
 
+# set to warn only once for the same warnings
+tf.get_logger().setLevel('ERROR')
 np.set_printoptions(precision=3, suppress=True)
 np.random.seed(2020)
 tf.random.set_seed(2020)
@@ -36,14 +40,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
-    parser.add_argument('aeNO', nargs='?', type=int, default=0)
+    parser.add_argument('aeNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.1,2.5,1.5,None,None]) # AE [.3,2.5,1.5] # CAE [.06,.3]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,.5,.3,None,None]) # AE [.3,2.5,1.5] # CAE [.1,.3] # VAE [.3]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
-    parser.add_argument('aes', nargs='?', type=str, default=['ae','cae'])
+    parser.add_argument('aes', nargs='?', type=str, default=['ae','cae','vae'])
     args = parser.parse_args()
     
     ##------ define the inverse elliptic problem ------##
@@ -126,7 +130,7 @@ def main():
     ##---- AUTOENCODER ----##
     # prepare for training data
     if 'c' in args.aes[args.aeNO]:
-        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_Ximg.npz'))
+        loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
         X=loaded['X']
         X=X[:,:-1,:-1,None]
     else:
@@ -142,18 +146,28 @@ def main():
     # define autoencoder
     if args.aes[args.aeNO]=='ae':
         half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
-#         activation='linear'
-        activation=tf.keras.layers.LeakyReLU(alpha=2.)
+        droprate=0.
+        activation='linear'
+#         activation=tf.keras.layers.LeakyReLU(alpha=2.)
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-        autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
+        lambda_=0.
+        autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
                                 activation=activation, optimizer=optimizer)
     elif args.aes[args.aeNO]=='cae':
-        num_filters=[16,1]
-        activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None}
-        latent_dim=elliptic_latent.prior.dim
+        num_filters=[16,1]; latent_dim=elliptic_latent.prior.dim
+#         activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None} # [16,1]
+        activations={'conv':'elu','latent':'linear'}
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
         autoencoder=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
                                     activations=activations, optimizer=optimizer)
+    elif args.aes[args.aeNO]=='vae':
+        half_depth=5; latent_dim=elliptic_latent.pde.V.dim()
+        repatr_out=False; beta=1.
+        activation='elu'
+#         activation=tf.keras.layers.LeakyReLU(alpha=0.01)
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+        autoencoder=VAE(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, repatr_out=repatr_out,
+                        activation=activation, optimizer=optimizer, beta=beta)
     f_name=[args.aes[args.aeNO]+'_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
     # load autoencoder
     try:
@@ -167,8 +181,10 @@ def main():
         print('\nNo autoencoder found. Training {}...\n'.format(args.aes[args.aeNO]))
         epochs=200
         patience=0
-        noise=.5
-        autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience,noise=noise)
+        noise=0.
+        kwargs={'patience':patience}
+        if args.aes[args.aeNO]=='ae' and noise: kwargs['noise']=noise
+        autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,**kwargs)
         # save autoencoder
         autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
         autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
@@ -186,7 +202,7 @@ def main():
     
     emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom_emul.geom(q,elliptic,emulator,geom_ord,whitened,**kwargs)
     latent_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic_latent.pde.V,elliptic.pde.V,autoencoder,geom_ord,whitened,emul_geom=emul_geom,**kwargs)
-    dream=DREAM(unknown,elliptic_latent,latent_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],volcrK=False)#,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
+    dream=DREAM(unknown,elliptic_latent,latent_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],log_wts=False)#,AE=autoencoder)#,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
     mc_fun=dream.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)

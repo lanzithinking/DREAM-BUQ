@@ -17,6 +17,7 @@ import sys
 sys.path.append( "../" )
 from nn.ae import AutoEncoder
 from nn.cae import ConvAutoEncoder
+from nn.vae import VAE
 from tensorflow.keras.models import load_model
 from util.dolfin_gadget import vec2fun,fun2img,img2fun
 from util.multivector import *
@@ -57,14 +58,14 @@ ensbl_sz = 500
 folder = './analysis_f_SNR'+str(SNR)
 
 ##---- AUTOENCODER ----##
-AE={0:'ae',1:'cae'}[0]
+AE={0:'ae',1:'cae',2:'vae'}[1]
 # prepare for training data
 if 'c' in AE:
     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
     X=loaded['X']
     X=X[:,:-1,:-1,None]
 else :
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_X.npz'))
     X=loaded['X']
 num_samp=X.shape[0]
 # n_tr=np.int(num_samp*.75)
@@ -76,18 +77,28 @@ x_train,x_test=X[tr_idx],X[te_idx]
 # define autoencoder
 if AE=='ae':
     half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
-#     activation='linear'
-    activation=tf.keras.layers.LeakyReLU(alpha=2.)
+    droprate=0.
+    activation='linear'
+#     activation=tf.keras.layers.LeakyReLU(alpha=2.)
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-    autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
+    lambda_=0.
+    autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
                             activation=activation, optimizer=optimizer)
 elif AE=='cae':
-    num_filters=[16,1]
-    activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None}
-    latent_dim=elliptic_latent.prior.dim
+    num_filters=[16,8]; latent_dim=elliptic_latent.prior.dim
+#     activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None} # [16,1]
+    activations={'conv':'elu','latent':'linear'}
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
     autoencoder=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
                                 activations=activations, optimizer=optimizer)
+elif AE=='vae':
+        half_depth=5; latent_dim=elliptic_latent.pde.V.dim()
+        repatr_out=False; beta=1.
+        activation='elu'
+#         activation=tf.keras.layers.LeakyReLU(alpha=0.01)
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+        autoencoder=VAE(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, repatr_out=repatr_out,
+                        activation=activation, optimizer=optimizer, beta=beta)
 f_name=[AE+'_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
 # load autoencoder
 try:
@@ -101,7 +112,7 @@ except:
     print('\nNo autoencoder found. Training {}...\n'.format(AE))
     epochs=200
     patience=0
-    noise=.5
+    noise=0.
     autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience,noise=noise)
     # save autoencoder
     autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
@@ -112,12 +123,8 @@ except:
 algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
 alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC')
 num_algs=len(algs)
-# preparation for estimates
-# folder = './analysis_f_SNR'+str(SNR)
-fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
-num_samp=5000
-prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
 # obtain estimates
+# folder = './analysis_f_SNR'+str(SNR)
 mean_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
 std_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
 if os.path.exists(os.path.join(folder,'mcmc_mean.h5')) and os.path.exists(os.path.join(folder,'mcmc_std.h5')):
@@ -131,16 +138,35 @@ if os.path.exists(os.path.join(folder,'mcmc_mean.h5')) and os.path.exists(os.pat
             f.read(samp_f,algs[i])
             std_v[i].set_local(samp_f.vector())
 else:
+    # preparation for estimates
+    hdf5_files=[f for f in os.listdir(folder) if f.endswith('.h5')]
+    pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
+    num_samp=5000
+    prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
     for i in range(num_algs):
         print('Getting estimates for '+algs[i]+' algorithm...')
+        # obtain weights
+        wts=np.ones(num_samp)/num_samp
+        if 'DREAM' in algs[i]:
+            for f_i in pckl_files:
+                if '_'+algs[i]+'_' in f_i:
+                    try:
+                        f=open(os.path.join(folder,f_i),'rb')
+                        f_read=pickle.load(f)
+                        logwts=f_read[4]; logwts-=logwts.max()
+                        wts=np.exp(logwts); wts/=np.sum(wts)
+                        f.close()
+                        print(f_i+' has been read!')
+                    except:
+                        pass
         bip=elliptic_latent if 'DREAM' in algs[i] else elliptic
         # calculate posterior estimates
         found=False
         samp_f=df.Function(bip.pde.V,name="parameter")
         samp_mean=elliptic.prior.gen_vector(); samp_mean.zero()
         samp_std=elliptic.prior.gen_vector(); samp_std.zero()
-        num_read=0
-        for f_i in fnames:
+#         num_read=0
+        for f_i in hdf5_files:
             if '_'+algs[i]+'_' in f_i:
                 try:
                     f=df.HDF5File(bip.pde.mpi_comm,os.path.join(folder,f_i),"r")
@@ -149,28 +175,28 @@ else:
                         if s+1 in prog:
                             print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
                         f.read(samp_f,'sample_{0}'.format(s))
-    #                     f.read(samp_f.vector(),'/VisualisationVector/{0}'.format(s),False)
                         if 'DREAM' in algs[i]:
                             if 'c' in AE:
                                 u_latin=fun2img(vec2fun(samp_f.vector(), elliptic_latent.pde.V))
                                 width=tuple(np.mod(i,2) for i in u_latin.shape)
-                                u_latin=chop(u_latin,width)[None,:,:,None]
+                                u_latin=chop(u_latin,width)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
                                 u=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),elliptic.pde.V).vector()
                             else:
                                 u_latin=samp_f.vector().get_local()[None,:]
                                 u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
                         else:
                             u=samp_f.vector()
-                        samp_mean.axpy(1.,u)
-                        samp_std.axpy(1.,u*u)
-                        num_read+=1
+                        samp_mean.axpy(wts[s],u)
+                        samp_std.axpy(wts[s],u*u)
+#                         num_read+=1
                     f.close()
                     print(f_i+' has been read!')
+                    f_read=f_i
                     found=True
                 except:
                     pass
         if found:
-            samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
+#             samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
             mean_v[i].set_local(samp_mean)
             std_v[i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
     # save

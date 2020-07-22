@@ -65,9 +65,6 @@ if PLOT:
     plt.ion()
 import os
 folder = os.path.join(os.getcwd(),'analysis_f_SNR'+str(SNR))
-fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
-num_ensbls=max_iter*ensbl_sz
-prog=np.ceil(num_ensbls*(.1+np.arange(0,1,.1)))
 # obtain estimates
 mean_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
 std_v=MultiVector(elliptic.prior.gen_vector(),num_algs)
@@ -82,6 +79,9 @@ if os.path.exists(os.path.join(folder,'enk_mean'+'_ensbl'+str(ensbl_sz)+'.h5')) 
             f.read(ensbl_f,algs[a])
             std_v[a].set_local(ensbl_f.vector())
 else:
+    fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
+    num_ensbls=max_iter*ensbl_sz
+    prog=np.ceil(num_ensbls*(.1+np.arange(0,1,.1)))
     for a in range(num_algs):
         ustd_fname=algs[a]+'_ustd'+'_ensbl'+str(ensbl_sz)+'_dim'+str(elliptic.prior.dim)
         u_std=df.HDF5File(elliptic.pde.mpi_comm,os.path.join(folder,ustd_fname+'.h5'),"w")

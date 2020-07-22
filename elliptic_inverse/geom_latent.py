@@ -41,7 +41,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     if 'Conv' in type(autoencoder).__name__:
         u_latin=fun2img(vec2fun(unknown_lat, V_lat))
         width=tuple(np.mod(i,2) for i in u_latin.shape)
-        u_latin=chop(u_latin,width)[None,:,:,None]
+        u_latin=chop(u_latin,width)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
         unknown=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),V).vector()
     else:
         u_latin=unknown_lat.get_local()[None,:]
@@ -68,10 +68,11 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     if any(s>=1 for s in geom_ord):
         jac_=autoencoder.jacobian(u_latin,'decode')
         if 'Conv' in type(autoencoder).__name__:
-# #             jac__=np.zeros(jac_.shape[:2]+tuple(i+1 for i in jac_.shape[2:]))
-# #             jac__[:,:,:-1,:-1]=jac_; jac_=jac__
-#             jac_=pad(jac_,(0,)*2+width)
-#             jac_=jac_.reshape(jac_.shape[:2]+(-1,))
+#             if autoencoder.activations['latent'] is None:
+# #                 jac__=np.zeros(jac_.shape[:2]+tuple(i+1 for i in jac_.shape[2:]))
+# #                 jac__[:,:,:-1,:-1]=jac_; jac_=jac__
+#                 jac_=pad(jac_,(0,)*2+width)
+#                 jac_=jac_.reshape(jac_.shape[:2]+(-1,))
 #             d2v = df.dof_to_vertex_map(V_lat)
 #             jac_=jac_[:,:,d2v]
 #         jac=MultiVector(unknown,V_lat.dim())
@@ -81,7 +82,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
 #         else:
 #             [jac[i].set_local(jac_[:,i]) for i in range(V_lat.dim()) for i in range(V_lat.dim())] # for loop is too slow
 #         gradlik_=jac.dot(gradlik)
-            jac_=pad(jac_,width*2)
+            jac_=pad(jac_,width*2 if autoencoder.activations['latent'] is None else width+(0,))
             jac_=jac_.reshape((np.prod(jac_.shape[:2]),np.prod(jac_.shape[2:])))
             jac_=jac_[np.ix_(df.dof_to_vertex_map(V), df.dof_to_vertex_map(V_lat))]
         gradlik_=jac_.T.dot(gradlik.get_local())

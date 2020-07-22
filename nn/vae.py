@@ -10,7 +10,7 @@ Created June 23, 2020
 __author__ = "Shiwei Lan; Shuyi Li"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -20,7 +20,7 @@ from tensorflow.keras.layers import Input,Dense
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
-
+# import tensorflow_probability as tfp
 
 class VAE:
     def __init__(self, dim, half_depth=3, latent_dim=None, **kwargs):
@@ -94,6 +94,9 @@ class VAE:
     def _KL_loss(self, input=None):
         """
         Kullback–Leibler between q(z|x) and p(z), regularization
+        --------------------------------------------------------
+        q(z|x) = N(mu(x), sigma(x)), where mu(x), sigma(x) are encoder outputs
+        p(z) = N(0,I)
         """
         if input is None: input = self.model.input
         mean, std = tf.split(self.encoder(input), 2, axis=1)
@@ -102,7 +105,10 @@ class VAE:
     
     def _nll_loss(self, *args, **kwargs):
         """
-        Expectation of negative Log-likelihood -log p(x|z) wrt q(z|x)
+        Expectation of negative Log-likelihood -log p(x|z) wrt q(z|x), reconstruction error
+        -----------------------------------------------------------------------------------
+        if no reparametrizing output, p(x'|z) = N(x,1), this is simply mse between x (y_true) and x' (y_pred);
+        otherwise, p(x'|z) = N(mu'(z), sigma'(z)), where mu'(z), sigma'(z) are decoder outputs, and the expectation is approximated by Monte Carlo
         """
         if not self.repatr_out:
             return .5*tf.keras.losses.MSE(*args, **kwargs)
@@ -120,9 +126,9 @@ class VAE:
             norm_dec = tf.compat.v1.distributions.Normal(mean, tf.math.abs(std))
 #             norm_dec = tfp.distributions.Normal(mean, tf.math.abs(std))
 #             nll = -tf.reduce_sum(norm_dec.log_prob(output),axis=1)
-            nll = -tf.reduce_mean(tf.reduce_sum(norm_dec.log_prob(tf.expand_dims(output,1)),axis=2),axis=0)
-#             nll = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(std))+.5*((mean-tf.expand_dims(output,1))/std)**2,axis=2),axis=0)
-#             nll1 = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(tf.expand_dims(std,0)))+.5*((tf.expand_dims(mean,0)-tf.expand_dims(output,1))/tf.expand_dims(std,0))**2,axis=2),axis=0)
+            nll = -tf.reduce_mean(tf.reduce_sum(norm_dec.log_prob(tf.expand_dims(output,1)),axis=2),axis=1)
+#             nll = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(std))+.5*((mean-tf.expand_dims(output,1))/std)**2,axis=2),axis=1)
+#             nll1 = tf.reduce_mean(tf.reduce_sum(.5*tf.math.log(2*np.math.pi)+tf.math.log(tf.math.abs(tf.expand_dims(std,0)))+.5*((tf.expand_dims(mean,0)-tf.expand_dims(output,1))/tf.expand_dims(std,0))**2,axis=2),axis=1)
         return nll
     
     def build(self,**kwargs):

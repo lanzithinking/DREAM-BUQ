@@ -9,7 +9,7 @@ Originally created June 28, 2020 @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -29,7 +29,14 @@ def chop(A):
         A_chopped=A_chopped[:,:-1]
     return A_chopped
 
-prep4dec = lambda u, V, ae_type: chop(fun2img(vec2fun(u,V)))[None,:,:,None] if 'Conv' in ae_type else u.get_local()[None,:] # chop image to have even dimensions
+# prep4dec = lambda u, V, ae_type: chop(fun2img(vec2fun(u,V)))[None,:,:,None] if 'Conv' in ae_type else u.get_local()[None,:] # chop image to have even dimensions
+def logvol(unknown_lat,V_lat,autoencoder,coding):
+    if 'Conv' in type(autoencoder).__name__:
+        u_latin=fun2img(vec2fun(unknown_lat, V_lat))
+        u_latin=chop(u_latin)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
+    else:
+        u_latin=unknown_lat.get_local()[None,:]
+    return autoencoder.logvol({'encode':autoencoder.decode(u_latin),'decode':u_latin}[coding],coding)
 
 class DREAM:
     """
@@ -47,12 +54,12 @@ class DREAM:
         self.model=model
         
         target_acpt=kwargs.pop('target_acpt',0.65)
-        self.volcrK=kwargs.pop('volcrK',False)
-        if self.volcrK:
+        self.log_wts=kwargs.pop('log_wts',False)
+        if self.log_wts:
             self.AE=kwargs.pop('AE',None)
             if self.AE is None:
-                print('Warning: No proper AutoEncoder found for volume correction! No volume adjustment will be made.')
-                self.volcrK=False
+                print('Warning: No proper AutoEncoder found for volume adjustment! No volume weights will be logged.')
+                self.log_wts=False
         
         # geometry needed
         geom_ord=[0]
@@ -97,7 +104,7 @@ class DREAM:
         """
         preconditioned Crank-Nicolson under DREAM framework
         """
-        logvol=0
+        logwt=0
         # initialization
         q=self.q.copy()
         
@@ -105,9 +112,7 @@ class DREAM:
         v=self.randv()
         
         # correct volume if requested
-        if self.volcrK:
-            q_=self.AE.decode(prep4dec(q,self.model.pde.V,type(self.AE).__name__))
-            logvol+=self.AE.logvol(q_,'encode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'encode')
         
         # generate proposal according to Crank-Nicolson scheme
         q.zero()
@@ -118,26 +123,27 @@ class DREAM:
         ll,_,_,_=self.geom(q)
         
         # correct volume if requested
-        if self.volcrK: logvol+=self.AE.logvol(prep4dec(q,self.model.pde.V,type(self.AE).__name__),'decode') # TODO: need go back to the original scale too?
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'decode') # TODO: need go back to the original scale too?
         
         # Metropolis test
-        logr=ll-self.ll+logvol
+        logr=ll-self.ll
         
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll;
             acpt=True
         else:
+            logwt=0
             acpt=False
         
         # return accept indicator
-        return acpt,logr
+        return acpt,logr,logwt
     
     def DREAMinfMALA(self):
         """
         infinite dimensional Metropolis Adjusted Langevin Algorithm under DREAM framework
         """
-        logvol=0
+        logwt=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h)
@@ -155,9 +161,7 @@ class DREAM:
         E_cur = -self.ll - rth/2*self.g.inner(v) + self.h/8*self.g.inner(ng)
         
         # correct volume if requested
-        if self.volcrK:
-            q_=self.AE.decode(prep4dec(q,self.model.pde.V,type(self.AE).__name__))
-            logvol+=self.AE.logvol(q_,'encode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'encode')
         
         # generate proposal according to Langevin dynamics
         q.zero()
@@ -179,26 +183,27 @@ class DREAM:
         E_prp = -ll - rth/2*g.inner(v) + self.h/8*g.inner(ng)
         
         # correct volume if requested
-        if self.volcrK: logvol+=self.AE.logvol(prep4dec(q,self.model.pde.V,type(self.AE).__name__),'decode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'decode')
         
         # Metropolis test
-        logr=-E_prp+E_cur+logvol
+        logr=-E_prp+E_cur
         
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll; self.g=g;
             acpt=True
         else:
+            logwt=0
             acpt=False
         
         # return accept indicator
-        return acpt,logr
+        return acpt,logr,logwt
     
     def DREAMinfHMC(self):
         """
         infinite dimensional Hamiltonian Monte Carlo under DREAM framework
         """
-        logvol=0
+        logwt=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h) # make the scale comparable to MALA
@@ -217,9 +222,7 @@ class DREAM:
         E_cur = -self.ll - self.h/8*self.g.inner(ng)
         
         # correct volume if requested
-        if self.volcrK:
-            q_=self.AE.decode(prep4dec(q,self.model.pde.V,type(self.AE).__name__))
-            logvol+=self.AE.logvol(q_,'encode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'encode')
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -252,26 +255,27 @@ class DREAM:
         E_prp = -ll - self.h/8*g.inner(ng)
         
         # correct volume if requested
-        if self.volcrK: logvol+=self.AE.logvol(prep4dec(q,self.model.pde.V,type(self.AE).__name__),'decode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur-pw+logvol
+        logr=-E_prp+E_cur-pw
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll; self.g=g;
             acpt=True
         else:
+            logwt=0
             acpt=False
 
         # return accept indicator
-        return acpt,logr
+        return acpt,logr,logwt
 
     def DREAMinfmMALA(self):
         """
         dimension-reduced infinite dimensional manifold MALA under DREAM framework
         """
-        logvol=0
+        logwt=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h)
@@ -289,9 +293,7 @@ class DREAM:
         E_cur = -self.ll - rth/2*self.g.inner(v) + self.h/8*self.g.inner(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
         # correct volume if requested
-        if self.volcrK:
-            q_=self.AE.decode(prep4dec(q,self.model.pde.V,type(self.AE).__name__))
-            logvol+=self.AE.logvol(q_,'encode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'encode')
         
         # generate proposal according to simplified manifold Langevin dynamics
         q.zero()
@@ -314,26 +316,27 @@ class DREAM:
         E_prp = -ll - rth/2*g.inner(v) + self.h/8*g.inner(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
         
         # correct volume if requested
-        if self.volcrK: logvol+=self.AE.logvol(prep4dec(q,self.model.pde.V,type(self.AE).__name__),'decode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur+logvol
+        logr=-E_prp+E_cur
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll; self.g=g; self.eigs=eigs;
             acpt=True
         else:
+            logwt=0
             acpt=False
 
         # return accept indicator
-        return acpt,logr
+        return acpt,logr,logwt
 
     def DREAMinfmHMC(self):
         """
         dimension-reduced infinite dimensional manifold HMC under DREAM framework
         """
-        logvol=0
+        logwt=0
         # initialization
         q=self.q.copy()
         rth=np.sqrt(self.h) # make the scale comparable to MALA
@@ -353,9 +356,7 @@ class DREAM:
         E_cur = -self.ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
         # correct volume if requested
-        if self.volcrK:
-            q_=self.AE.decode(prep4dec(q,self.model.pde.V,type(self.AE).__name__))
-            logvol+=self.AE.logvol(q_,'encode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'encode')
         
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -389,20 +390,21 @@ class DREAM:
         E_prp = -ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
         
         # correct volume if requested
-        if self.volcrK: logvol+=self.AE.logvol(prep4dec(q,self.model.pde.V,type(self.AE).__name__),'decode')
+        if self.log_wts: logwt+=logvol(q,self.model.pde.V,self.AE,'decode')
 
         # Metropolis test
-        logr=-E_prp+E_cur-pw+logvol
+        logr=-E_prp+E_cur-pw
 
         if np.isfinite(logr) and np.log(np.random.uniform())<min(0,logr):
             # accept
             self.q=q; self.ll=ll; self.g=g; self.eigs=eigs;
             acpt=True
         else:
+            logwt=0
             acpt=False
 
         # return accept indicator
-        return acpt,logr
+        return acpt,logr,logwt
     
     def _init_h(self):
         """
@@ -454,6 +456,7 @@ class DREAM:
 #         self.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
         self.samp=df.HDF5File(self.model.pde.mpi_comm,os.path.join(samp_fpath,samp_fname+".h5"),"w")
         self.loglik=np.zeros(num_samp+num_burnin)
+        self.logwts=np.zeros(num_samp+num_burnin)
         self.acpt=0.0 # final acceptance rate
         self.times=np.zeros(num_samp+num_burnin) # record the history of time used for each sample
         
@@ -476,11 +479,11 @@ class DREAM:
             # generate MCMC sample with given sampler
             while True:
                 try:
-                    acpt_idx,logr=sampler()
+                    acpt_idx,logr,logwt=sampler()
                 except RuntimeError as e:
                     print(e)
                     if num_retry_bad==0:
-                        acpt_idx=False; logr=-np.inf
+                        acpt_idx=False; logr=-np.inf; logwt=0
                         print('Bad proposal encountered! Passing... bias introduced.')
                         break # reject bad proposal: bias introduced
                     else:
@@ -489,7 +492,7 @@ class DREAM:
                             print('Bad proposal encountered! Retrying...')
                             continue # retry until a valid proposal is made
                         else:
-                            acpt_idx=False; logr=-np.inf # reject it and keep going
+                            acpt_idx=False; logr=-np.inf; logwt=0
                             num_cons_bad=0
                             print(str(num_retry_bad)+' consecutive bad proposals encountered! Passing...')
                             break # reject it and keep going
@@ -506,6 +509,7 @@ class DREAM:
 
             # save results
             self.loglik[s]=self.ll
+            self.logwts[s]=logwt
             if s>=num_burnin:
 #                 self.samp << vec2fun(self.q,self.model.prior.V,name='sample_{0}'.format(s-num_burnin))
                 q_f=df.Function(self.model.prior.V)
@@ -561,7 +565,7 @@ class DREAM:
         self.filename=self.alg_name+'_dim'+str(self.dim)+'_'+ctime
         # dump data
         f=open(os.path.join(self.savepath,self.filename+'.pckl'),'wb')
-        res2save=[self.h,self.L,self.alg_name,self.loglik,self.acpt,self.time,self.times]
+        res2save=[self.h,self.L,self.alg_name,self.loglik,self.logwts,self.acpt,self.time,self.times]
         if self.adpt_h:
             res2save.append(self.h_adpt)
         pickle.dump(res2save,f)

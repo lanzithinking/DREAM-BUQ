@@ -143,7 +143,7 @@ class CNN:
         """
         if not objf:
             objf = lambda x: tf.keras.losses.MeanSquaredError(self.y_train,self.model(x))
-        x = tf.Variable(input, trainable=True)
+        x = tf.Variable(input, trainable=True, dtype=tf.float32)
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(x)
             obj = objf(x)

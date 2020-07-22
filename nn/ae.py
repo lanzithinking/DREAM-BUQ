@@ -10,13 +10,13 @@ Created June 4, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Input,Dense
+from tensorflow.keras.layers import Input,Dense,Dropout
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
@@ -32,6 +32,7 @@ class AutoEncoder:
         half_depth: the depth of the network of encoder and decoder if a symmetric structure is imposed (by default)
         latent_dim: the dimension of the latent space
         node_sizes: sizes of the nodes of the network, which can override half_depth and induce an asymmetric structure.
+        droprate: the rate of Dropout
         activation: specification of activation functions, can be a string or a Keras activation layer
         kernel_initializer: kernel_initializer corresponding to activation
         """
@@ -45,6 +46,7 @@ class AutoEncoder:
             self.node_sizes = np.concatenate((self.node_sizes,self.node_sizes[-2::-1]))
         if not np.all([self.node_sizes[i]==self.dim for i in (0,-1)]):
             raise ValueError('End node sizes not matching input/output dimensions!')
+        self.droprate = kwargs.pop('droprate',0)
         self.activation = kwargs.pop('activation','linear')
         self.kernel_initializer=kwargs.pop('kernel_initializer','glorot_uniform')
         # build neural network
@@ -63,6 +65,7 @@ class AutoEncoder:
                 output = self.activation(output)
             else:
                 output = Dense(units=node_sizes[i+1], activation=self.activation, kernel_initializer=self.kernel_initializer, name=layer_name)(output)
+            if self.droprate>0: output=Dropout(rate=self.droprate)(output)
         return output
     
     def _custom_loss(self,loss_f):
@@ -81,7 +84,17 @@ class AutoEncoder:
         """
         def loss(y_true, y_pred):
             L=tf.keras.losses.MSE(y_true, y_pred)
-            L+=lambda_*tf.reduce_sum(self.batch_jacobian(input=y_true,coding='encode')**2,axis=[1,2])
+            L+=lambda_*tf.math.reduce_sum(self.batch_jacobian(input=y_true,coding='encode')**2,axis=[1,2])
+            return L
+        return loss
+    
+    def _logvol_loss(self,lambda_=1):
+        """
+        Loss of log-volume of encoder and decoder
+        """
+        def loss(y_true, y_pred):
+            L=tf.keras.losses.MSE(y_true, y_pred)
+            L+=lambda_*(self.batch_logvol(input=y_true,coding='encode')**2+self.batch_logvol(input=self.encoder(y_true),coding='decode')**2)
             return L
         return loss
     
@@ -107,9 +120,9 @@ class AutoEncoder:
         # compile model
         optimizer = kwargs.pop('optimizer','adam')
         loss = kwargs.pop('loss','mse')
-        lambda_ = kwargs.pop('lambda',1.)
+        lambda_ = kwargs.pop('lambda_',1.)
         metrics = kwargs.pop('metrics',['mae'])
-        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else self._contrative_loss(lambda_) if loss=='contractive' else loss, metrics=metrics, **kwargs)
+        self.model.compile(optimizer=optimizer, loss=self._custom_loss(loss) if callable(loss) else getattr(self,loss+'_loss')(lambda_) if '_' in loss else loss, metrics=metrics, **kwargs)
     
     def train(self, x_train, x_test=None, epochs=100, batch_size=32, verbose=0, **kwargs):
         """
@@ -173,9 +186,17 @@ class AutoEncoder:
             jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
     
+    def logvol(self, input, coding='encode'):
+        """
+        Obtain the log-volume defined by Gram matrix determinant
+        """
+        jac = self.jacobian(input, coding)
+        d = np.abs(np.linalg.svd(jac,compute_uv=False))
+        return np.sum(np.log(d[d>0]))
+    
     def batch_jacobian(self, input=None, coding='encode'):
         """
-        Obtain Jacobian matrix of encoder (coding encode) or decoder (coding decode)
+        Obtain Jacobian matrix of encoder (coding encode) or decoder (coding decode) in batch mode
         ------------------------------------------
         Note: when using model input, it has to run with eager execution disabled in TF v2.2.0
         """
@@ -194,13 +215,13 @@ class AutoEncoder:
             jac = g.batch_jacobian(y,x,experimental_use_pfor=False)
         return jac# if input is None else np.squeeze(jac.numpy())
     
-    def logvol(self, input, coding='encode'):
+    def batch_logvol(self, input=None, coding='encode'):
         """
-        Obtain the log-volume defined by Gram matrix determinant
+        Obtain the log-volume defined by Gram matrix determinant in batch mode
         """
-        jac = self.jacobian(input, coding)
-        d = np.abs(np.linalg.svd(jac,compute_uv=False))
-        return np.sum(np.log(d[d>0]))
+        jac = self.batch_jacobian(input, coding)
+        d = tf.linalg.svd(jac,compute_uv=False)
+        return tf.math.reduce_sum(tf.math.log(d),axis=1)
 
 if __name__ == '__main__':
     # set random seed
