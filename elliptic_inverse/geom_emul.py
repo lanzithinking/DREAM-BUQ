@@ -17,7 +17,7 @@ def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
     
     # un-whiten if necessary
     if whitened:
-        unknown=self.prior.v2u(unknown)
+        unknown=bip.prior.v2u(unknown)
     
     u_input = {'DNN':unknown.get_local()[None,:], 'CNN':fun2img(vec2fun(unknown,bip.pde.V))[None,:,:,None]}[type(emulator).__name__]
     

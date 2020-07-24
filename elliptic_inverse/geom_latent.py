@@ -33,9 +33,10 @@ def chop(A,width=[1]):
 def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
     
-#     # un-whiten if necessary
-#     if whitened:
-#         unknown_lat=bip_lat.prior.v2u(unknown_lat)
+    # un-whiten if necessary
+    if 'lat' in whitened:
+        bip_lat=kwargs.get('bip_lat')
+        unknown_lat=bip_lat.prior.v2u(unknown_lat)
     
 #     u_latin={'AutoEncoder':unknown_lat.get_local()[None,:],'ConvAutoEncoder':chop(fun2img(vec2fun(unknown_lat, V_lat)))[None,:,:,None]}[type(autoencoder).__name__]
     if 'Conv' in type(autoencoder).__name__:
@@ -51,21 +52,24 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     emul_geom=kwargs.pop('emul_geom',None)
     full_geom=kwargs.pop('full_geom',None)
     bip_lat=kwargs.pop('bip_lat',None)
+    bip=kwargs.pop('bip',None)
     try:
         if len(kwargs)==0:
-            loglik,gradlik,metact_,rtmetact_ = emul_geom(unknown,geom_ord,whitened)
+            loglik,gradlik,metact_,rtmetact_ = emul_geom(unknown,geom_ord,'emu' in whitened)
         else:
-            loglik,gradlik,metact_,eigs_ = emul_geom(unknown,geom_ord,whitened,**kwargs)
+            loglik,gradlik,metact_,eigs_ = emul_geom(unknown,geom_ord,'emu' in whitened,**kwargs)
     except:
         try:
             if len(kwargs)==0:
-                loglik,gradlik,metact_,rtmetact_ = full_geom(unknown,geom_ord,whitened)
+                loglik,gradlik,metact_,rtmetact_ = full_geom(unknown,geom_ord,'ori' in whitened)
             else:
-                loglik,gradlik,metact_,eigs_ = full_geom(unknown,geom_ord,whitened,**kwargs)
+                loglik,gradlik,metact_,eigs_ = full_geom(unknown,geom_ord,'ori' in whitened,**kwargs)
         except:
             raise RuntimeError('No geometry in the original space available!')
     
     if any(s>=1 for s in geom_ord):
+        if 'lat' in whitened:
+            gradlik = bip.prior.C_act(gradlik,.5,op='C',transp=True)
         jac_=autoencoder.jacobian(u_latin,'decode')
         if 'Conv' in type(autoencoder).__name__:
 #             if autoencoder.activations['latent'] is None:
@@ -112,7 +116,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     if any(s>1 for s in geom_ord) and len(kwargs)!=0:
         if bip_lat is None: raise ValueError('No latent inverse problem defined!')
         # compute eigen-decomposition using randomized algorithms
-        if whitened:
+        if 'lat' in whitened:
             # generalized eigen-decomposition (_C^(1/2) F _C^(1/2), M), i.e. _C^(1/2) F _C^(1/2) = M V D V', V' M V = I
             def invM(a):
                 a=bip_lat.prior.gen_vector(a)

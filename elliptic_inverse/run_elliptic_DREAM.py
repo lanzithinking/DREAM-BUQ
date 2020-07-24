@@ -38,12 +38,12 @@ tf.random.set_seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=0)
+    parser.add_argument('algNO', nargs='?', type=int, default=1)
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
-    parser.add_argument('aeNO', nargs='?', type=int, default=1)
+    parser.add_argument('aeNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,.5,.3,None,None]) # AE [.3,2.5,1.5] # CAE [.1,.3] # VAE [.3]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.3,.3,.6,None,None]) # AE [.3,2.5,1.5] # CAE [.1,.6,.3] # VAE [.3]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -147,14 +147,14 @@ def main():
     if args.aes[args.aeNO]=='ae':
         half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
         droprate=0.
-        activation='linear'
-#         activation=tf.keras.layers.LeakyReLU(alpha=2.)
+#         activation='linear'
+        activation=tf.keras.layers.LeakyReLU(alpha=2.)
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
         lambda_=0.
         autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
                                 activation=activation, optimizer=optimizer)
     elif args.aes[args.aeNO]=='cae':
-        num_filters=[16,1]; latent_dim=elliptic_latent.prior.dim
+        num_filters=[16,8]; latent_dim=elliptic_latent.prior.dim
 #         activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None} # [16,1]
         activations={'conv':'elu','latent':'linear'}
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -201,8 +201,8 @@ def main():
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
     emul_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom_emul.geom(q,elliptic,emulator,geom_ord,whitened,**kwargs)
-    latent_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic_latent.pde.V,elliptic.pde.V,autoencoder,geom_ord,whitened,emul_geom=emul_geom,**kwargs)
-    dream=DREAM(unknown,elliptic_latent,latent_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],log_wts=False)#,AE=autoencoder)#,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
+    latent_geom=lambda q,geom_ord=[0],whitened=False,**kwargs:geom(q,elliptic_latent.pde.V,elliptic.pde.V,autoencoder,geom_ord,whitened,emul_geom=emul_geom,bip_lat=elliptic_latent,bip=elliptic,**kwargs)
+    dream=DREAM(unknown,elliptic_latent,latent_geom,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO],whitened='emulation',log_wts=False)#,AE=autoencoder)#,k=5,bip_lat=elliptic_latent) # uncomment for manifold algorithms
     mc_fun=dream.sample
     mc_args=(args.num_samp,args.num_burnin)
     mc_fun(*mc_args)

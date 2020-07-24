@@ -9,7 +9,7 @@ Originally created June 28, 2020 @ ASU
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -60,12 +60,13 @@ class DREAM:
             if self.AE is None:
                 print('Warning: No proper AutoEncoder found for volume adjustment! No volume weights will be logged.')
                 self.log_wts=False
+        self.whitened=kwargs.pop('whitened',False)
         
         # geometry needed
         geom_ord=[0]
         if any(s in alg_name for s in ['MALA','HMC']): geom_ord.append(1)
         if any(s in alg_name for s in ['mMALA','mHMC']): geom_ord.append(2)
-        self.geom=lambda parameter: latent_geom(parameter,geom_ord=geom_ord,**kwargs)
+        self.geom=lambda parameter: latent_geom(parameter,geom_ord=geom_ord,whitened=self.whitened,**kwargs)
         self.ll,self.g,_,self.eigs=self.geom(self.q)
 #         self.ll,self.g,_,self.eigs=self.model.get_geom(self.q,geom_ord,**kwargs)
         
@@ -95,7 +96,7 @@ class DREAM:
         sample v ~ N(0,C) or N(0,invK(q))
         """
         if post_Ga is None:
-            v = self.model.prior.sample()
+            v = self.model.prior.sample(whiten=self.whitened)
         else:
             v = self.model.post_Ga.sample()
         return v
@@ -152,7 +153,11 @@ class DREAM:
         v=self.randv()
         
         # natural gradient
-        ng=self.model.prior.C_act(self.g)
+        if self.whitened:
+            ng=self.model.prior.gen_vector()
+            self.model.prior.Msolver.solve(ng,self.g)
+        else:
+            ng=self.model.prior.C_act(self.g)
         
         # update velocity
         v.axpy(rth/2,ng)
@@ -177,7 +182,11 @@ class DREAM:
         ll,g,_,_=self.geom(q)
         
         # natural gradient
-        ng=self.model.prior.C_act(g)
+        if self.whitened:
+            ng=self.model.prior.gen_vector()
+            self.model.prior.Msolver.solve(ng,g)
+        else:
+            ng=self.model.prior.C_act(g)
         
         # new energy
         E_prp = -ll - rth/2*g.inner(v) + self.h/8*g.inner(ng)
@@ -213,7 +222,7 @@ class DREAM:
         v=self.randv()
 
         # natural gradient
-        ng=self.model.prior.C_act(self.g)
+        ng=self.g if self.whitened else self.model.prior.C_act(self.g)
 
         # accumulate the power of force
         pw = rth/2*self.g.inner(v)
@@ -240,7 +249,7 @@ class DREAM:
 
             # update geometry
             ll,g,_,_=self.geom(q)
-            ng=self.model.prior.C_act(g)
+            ng=g if self.whitened else self.model.prior.C_act(g)
 
             # another half step for velocity
             v.axpy(rth/2,ng)
@@ -449,7 +458,8 @@ class DREAM:
 
         # allocate space to store results
         import os
-        samp_fname='_samp_'+self.alg_name+'_dim'+str(self.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
+        ifwhiten='_whitened_'+self.whitened if self.whitened else ''
+        samp_fname='_samp_'+self.alg_name+'_dim'+str(self.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")+ifwhiten
         samp_fpath=os.path.join(os.getcwd(),'result')
         if not os.path.exists(samp_fpath):
             os.makedirs(samp_fpath)

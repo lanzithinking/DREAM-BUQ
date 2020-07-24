@@ -12,7 +12,7 @@ from util.dolfin_gadget import vec2fun,fun2img
 import pickle
 
 TRAIN={0:'XimgY',1:'XY'}[1]
-whiten=False
+whiten=True
 
 def retrieve_ensemble(bip,dir_name,f_name,ensbl_sz,max_iter,img_out=False,whiten=False):
     f=df.HDF5File(bip.pde.mpi_comm,os.path.join(dir_name,f_name),"r")
@@ -102,11 +102,11 @@ if __name__ == '__main__':
                         pass
         if found and SAVE:
             savepath='./train_NN/'
-            ifwhite='_whitened' if whiten else ''
+            ifwhiten='_whitened' if whiten else ''
             if 'Y' in TRAIN:
-                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+ifwhite),X=out,Y=fwdout)
+                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+ifwhiten),X=out,Y=fwdout)
             else:
-                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+ifwhite),X=out)
+                np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+ifwhiten),X=out)
 #             # how to load
 #             loaded=np.load(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+'.npz'))
 #             X=loaded['X']

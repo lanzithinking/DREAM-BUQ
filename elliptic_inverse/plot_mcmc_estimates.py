@@ -5,7 +5,7 @@ Shiwei Lan @ U of Warwick, 2016
 Modified for DREAM July 2020 @ ASU
 """
 
-import os
+import os,pickle
 import numpy as np
 import dolfin as df
 import tensorflow as tf
@@ -58,7 +58,7 @@ ensbl_sz = 500
 folder = './analysis_f_SNR'+str(SNR)
 
 ##---- AUTOENCODER ----##
-AE={0:'ae',1:'cae',2:'vae'}[1]
+AE={0:'ae',1:'cae',2:'vae'}[0]
 # prepare for training data
 if 'c' in AE:
     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
@@ -78,8 +78,8 @@ x_train,x_test=X[tr_idx],X[te_idx]
 if AE=='ae':
     half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
     droprate=0.
-    activation='linear'
-#     activation=tf.keras.layers.LeakyReLU(alpha=2.)
+#     activation='linear'
+    activation=tf.keras.layers.LeakyReLU(alpha=2.)
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
     lambda_=0.
     autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
@@ -113,7 +113,9 @@ except:
     epochs=200
     patience=0
     noise=0.
-    autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,patience=patience,noise=noise)
+    kwargs={'patience':patience}
+    if AE=='ae' and noise: kwargs['noise']=noise
+    autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,**kwargs)
     # save autoencoder
     autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
     autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
@@ -186,6 +188,7 @@ else:
                                 u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
                         else:
                             u=samp_f.vector()
+                        if '_whitened' in f_i: u=elliptic.prior.v2u(u)
                         samp_mean.axpy(wts[s],u)
                         samp_std.axpy(wts[s],u*u)
 #                         num_read+=1
