@@ -9,7 +9,7 @@ import numpy as np
 import dolfin as df
 import sys,os
 sys.path.append( "../" )
-from util.dolfin_gadget import vec2fun,fun2img,img2fun
+from util.dolfin_gadget import vec2fun,fun2img,img2fun,create_PETScMatrix
 from util.multivector import *
 from util.Eigen import *
 from posterior import *
@@ -34,7 +34,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
     
     # un-whiten if necessary
-    if 'lat' in whitened:
+    if whitened=='latent':
         bip_lat=kwargs.get('bip_lat')
         unknown_lat=bip_lat.prior.v2u(unknown_lat)
     
@@ -55,20 +55,20 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     bip=kwargs.pop('bip',None)
     try:
         if len(kwargs)==0:
-            loglik,gradlik,metact_,rtmetact_ = emul_geom(unknown,geom_ord,'emu' in whitened)
+            loglik,gradlik,metact_,rtmetact_ = emul_geom(unknown,geom_ord,whitened=='emulated')
         else:
-            loglik,gradlik,metact_,eigs_ = emul_geom(unknown,geom_ord,'emu' in whitened,**kwargs)
+            loglik,gradlik,metact_,eigs_ = emul_geom(unknown,geom_ord,whitened=='emulated',**kwargs)
     except:
         try:
             if len(kwargs)==0:
-                loglik,gradlik,metact_,rtmetact_ = full_geom(unknown,geom_ord,'ori' in whitened)
+                loglik,gradlik,metact_,rtmetact_ = full_geom(unknown,geom_ord,whitened=='original')
             else:
-                loglik,gradlik,metact_,eigs_ = full_geom(unknown,geom_ord,'ori' in whitened,**kwargs)
+                loglik,gradlik,metact_,eigs_ = full_geom(unknown,geom_ord,whitened=='original',**kwargs)
         except:
             raise RuntimeError('No geometry in the original space available!')
     
     if any(s>=1 for s in geom_ord):
-        if 'lat' in whitened:
+        if whitened=='latent':
             gradlik = bip.prior.C_act(gradlik,.5,op='C',transp=True)
         jac_=autoencoder.jacobian(u_latin,'decode')
         if 'Conv' in type(autoencoder).__name__:
@@ -89,9 +89,20 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
             jac_=pad(jac_,width*2 if autoencoder.activations['latent'] is None else width+(0,))
             jac_=jac_.reshape((np.prod(jac_.shape[:2]),np.prod(jac_.shape[2:])))
             jac_=jac_[np.ix_(df.dof_to_vertex_map(V), df.dof_to_vertex_map(V_lat))]
+#         try:
+#         import timeit
+#         t_start=timeit.default_timer()
+#         jac=create_PETScMatrix(jac_.shape,V.mesh().mpi_comm(),range(jac_.shape[0]),range(jac_.shape[1]),jac_)
+#         gradlik_=df.as_backend_type(gradlik).vec()
+#         gradlik1=df.Vector(unknown_lat)
+#         jac.multTranspose(gradlik_,df.as_backend_type(gradlik1).vec())
+#         print('time consumed:{}'.format(timeit.default_timer()-t_start))
+#         except:
+#         t_start=timeit.default_timer()
         gradlik_=jac_.T.dot(gradlik.get_local())
         gradlik=df.Vector(unknown_lat)
         gradlik.set_local(gradlik_)
+#         print('time consumed:{}'.format(timeit.default_timer()-t_start))
     
     if any(s>=1.5 for s in geom_ord):
         def _get_metact_misfit(u_actedon):
@@ -116,7 +127,7 @@ def geom(unknown_lat,V_lat,V,autoencoder,geom_ord=[0],whitened=False,**kwargs):
     if any(s>1 for s in geom_ord) and len(kwargs)!=0:
         if bip_lat is None: raise ValueError('No latent inverse problem defined!')
         # compute eigen-decomposition using randomized algorithms
-        if 'lat' in whitened:
+        if whitened=='latent':
             # generalized eigen-decomposition (_C^(1/2) F _C^(1/2), M), i.e. _C^(1/2) F _C^(1/2) = M V D V', V' M V = I
             def invM(a):
                 a=bip_lat.prior.gen_vector(a)

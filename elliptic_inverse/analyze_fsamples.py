@@ -118,8 +118,7 @@ class ana_samp(object):
 #                         _,_,_,_,_,soln_count,args=pickle.load(f,encoding='bytes')
                         f_read=pickle.load(f,encoding='bytes')
                         stepsz=f_read[0]
-                        adjuster='DREAM' in self.algs[a]
-                        loglik,acpt,time=f_read[3],f_read[adjuster+4:adjuster+6]
+                        loglik,(acpt,time)=f_read[3],f_read[-3:-1]
                         f_read=pickle.load(f,encoding='bytes')
                         soln_count,args=f_read[5:7]
                         f.close()

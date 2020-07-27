@@ -222,7 +222,11 @@ class DREAM:
         v=self.randv()
 
         # natural gradient
-        ng=self.g if self.whitened else self.model.prior.C_act(self.g)
+        if self.whitened:
+            ng=self.model.prior.gen_vector()
+            self.model.prior.Msolver.solve(ng,self.g)
+        else:
+            ng=self.model.prior.C_act(self.g)
 
         # accumulate the power of force
         pw = rth/2*self.g.inner(v)
@@ -249,7 +253,11 @@ class DREAM:
 
             # update geometry
             ll,g,_,_=self.geom(q)
-            ng=g if self.whitened else self.model.prior.C_act(g)
+            if self.whitened:
+                ng=self.model.prior.gen_vector()
+                self.model.prior.Msolver.solve(ng,g)
+            else:
+                ng=self.model.prior.C_act(g)
 
             # another half step for velocity
             v.axpy(rth/2,ng)

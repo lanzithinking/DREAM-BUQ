@@ -79,7 +79,7 @@ if AE=='ae':
     half_depth=3; latent_dim=elliptic_latent.pde.V.dim()
     droprate=0.
 #     activation='linear'
-    activation=tf.keras.layers.LeakyReLU(alpha=2.)
+    activation=tf.keras.layers.LeakyReLU(alpha=2.00)
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
     lambda_=0.
     autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
@@ -112,7 +112,7 @@ except:
     print('\nNo autoencoder found. Training {}...\n'.format(AE))
     epochs=200
     patience=0
-    noise=0.
+    noise=0.2
     kwargs={'patience':patience}
     if AE=='ae' and noise: kwargs['noise']=noise
     autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,**kwargs)
@@ -177,18 +177,20 @@ else:
                         if s+1 in prog:
                             print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
                         f.read(samp_f,'sample_{0}'.format(s))
+                        u=samp_f.vector()
+                        if '_whitened_latent' in f_i: u=bip.prior.v2u(u)
                         if 'DREAM' in algs[i]:
                             if 'c' in AE:
-                                u_latin=fun2img(vec2fun(samp_f.vector(), elliptic_latent.pde.V))
+                                u_latin=fun2img(vec2fun(u, elliptic_latent.pde.V))
                                 width=tuple(np.mod(i,2) for i in u_latin.shape)
                                 u_latin=chop(u_latin,width)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
                                 u=img2fun(pad(np.squeeze(autoencoder.decode(u_latin)),width),elliptic.pde.V).vector()
                             else:
-                                u_latin=samp_f.vector().get_local()[None,:]
+                                u_latin=u.get_local()[None,:]
                                 u=elliptic.prior.gen_vector(autoencoder.decode(u_latin).flatten())
-                        else:
-                            u=samp_f.vector()
-                        if '_whitened' in f_i: u=elliptic.prior.v2u(u)
+#                         else:
+#                             u=u_
+                        if '_whitened_emulated' in f_i: u=elliptic.prior.v2u(u)
                         samp_mean.axpy(wts[s],u)
                         samp_std.axpy(wts[s],u*u)
 #                         num_read+=1
