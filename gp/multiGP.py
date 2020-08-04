@@ -25,10 +25,10 @@ class multiGP:
     def __init__(self, input_dim, output_dim, latent_dim, **kwargs):
         """
         Multi-output Gaussian Process [Sparse Variational Gaussian Process (SVGP)]
-        --------------------------------------------------------------------------
+        -------------------------------------------------------------------------------------
         refer to: https://gpflow.readthedocs.io/en/master/notebooks/advanced/multioutput.html
-                  https://gpflow.readthedocs.io/en/master/notebooks/intro_to_gpflow2.html?highlight=gradient#Training-using-Gradient-Tapes
-        --------------------------------------------------------------------------
+                  https://gpflow.readthedocs.io/en/master/notebooks/intro_to_gpflow2.html
+        -------------------------------------------------------------------------------------
         input_dim: the dimension of the input space
         output_dim: the dimension of the output space
         latent_dim: the dimension of the latent space
@@ -127,7 +127,7 @@ class multiGP:
         Optimize model using the Tensorflow GradientTape with batch optimization
         """
         # obtain train_dataset and batches
-        num_train_data = train_data.shape[0]
+        num_train_data = train_data[0].shape[0]
         train_dataset = tf.data.Dataset.from_tensor_slices(train_data)
         batch_size = kwargs.pop('batch_size',32)
         prefetch_size = tf.data.experimental.AUTOTUNE
@@ -171,8 +171,8 @@ class multiGP:
             self.build(input=x_train,**self.kwargs)
         
         if 'batch_size' in kwargs:
-            self._optimize_model_with_tensorflow(train_data=(x_train,y_train),test_data=(x_test,y_test),**kwargs)
-#             self._optimize_model_with_gradienttape(train_data=(x_train,y_train),test_data=(x_test,y_test),**kwargs)
+#             self._optimize_model_with_tensorflow(train_data=(x_train,y_train),test_data=(x_test,y_test),**kwargs)
+            self._optimize_model_with_gradienttape(train_data=(x_train,y_train),test_data=(x_test,y_test),**kwargs)
         else:
             self._optimize_model_with_scipy(train_data=(x_train,y_train),**kwargs)
     
