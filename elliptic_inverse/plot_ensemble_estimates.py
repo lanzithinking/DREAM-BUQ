@@ -11,6 +11,7 @@ import sys
 sys.path.append( "../" )
 from util.multivector import *
 # from optimizer.EnK_dolfin import *
+from util.common_colorbar import common_colorbar
 
 # np.random.seed(2020)
 
@@ -25,7 +26,7 @@ SNR=50 # 100
 elliptic=Elliptic(nx=nx,ny=ny,SNR=SNR,sigma=sigma,s=s)
 
 # # initialization
-ensbl_sz=500
+ensbl_sz=100
 # unknown=MultiVector(elliptic.prior.gen_vector(),ensbl_sz)
 # for j in range(ensbl_sz): unknown[j].set_local(elliptic.prior.sample(whiten=False))
 # # define parameters needed
@@ -45,7 +46,7 @@ ensbl_sz=500
 # err_thld=1e-1
 algs=['EKI','EKS']
 num_algs=len(algs)
-max_iter=10
+max_iter=50
 
 # #### EKI ####
 # eki=EnK(unknown,G,data,elliptic.prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=algs[0],reg=True)
@@ -155,18 +156,26 @@ plt.rcParams['image.cmap'] = 'jet'
 # ensemble mean
 num_rows=1
 fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((1+num_algs)/num_rows)),sharex=True,sharey=True,figsize=(16,4))
+sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
     if i==0:
         # plot MAP
         try:
-            f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
-            MAP=df.Function(elliptic.pde.V,name="parameter")
-            f.read(MAP,"parameter")
+#             f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join('./result',"MAP_SNR"+str(SNR)+".h5"), "r")
+#             MAP=df.Function(elliptic.pde.V,name="parameter")
+#             f.read(MAP,"parameter")
+#             f.close()
+#             sub_figs[i]=df.plot(MAP)
+# #             fig.colorbar(sub_figs[i],ax=ax)
+#             ax.set_title('MAP')
+            f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join(folder,"longrun_mcmc_mean.h5"), "r")
+            PtEst=df.Function(elliptic.pde.V,name="parameter")
+            f.read(PtEst,"infHMC")
             f.close()
-            sub_fig=df.plot(MAP)
-            fig.colorbar(sub_fig,ax=ax)
-            ax.set_title('MAP')
+            sub_figs[i]=df.plot(PtEst)
+            fig.colorbar(sub_figs[i],ax=ax)
+            ax.set_title('Long-run MCMC')
         except Exception as err:
             print(err)
             pass
@@ -188,11 +197,12 @@ for i,ax in enumerate(axes.flat):
                     print(err)
                     pass
         if found:
-            sub_fig=df.plot(u_est)
-            fig.colorbar(sub_fig,ax=ax)
+            sub_figs[i]=df.plot(u_est)
+            fig.colorbar(sub_figs[i],ax=ax)
         ax.set_title(algs[i-1])
     ax.set_aspect('auto')
 plt.axis([0, 1, 0, 1])
+# fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.1, hspace=0)
 # save plots
 # fig.tight_layout(h_pad=1)
@@ -202,18 +212,19 @@ plt.savefig(folder+'/ensemble_estimates_mean'+'_ensbl'+str(ensbl_sz)+'.png',bbox
 # ensemble std
 num_rows=1
 fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((1+num_algs)/num_rows)),sharex=True,sharey=True,figsize=(16,4))
+sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
     if i==0:
         # plot uq
         try:
-            f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join(folder,"mcmc_std.h5"), "r")
+            f=df.HDF5File(elliptic.pde.mpi_comm, os.path.join(folder,"longrun_mcmc_std.h5"), "r")
             UQ=df.Function(elliptic.pde.V,name="parameter")
             f.read(UQ,"infHMC")
             f.close()
-            sub_fig=df.plot(UQ)
-            fig.colorbar(sub_fig,ax=ax)
-            ax.set_title('$\infty$-HMC')
+            sub_figs[i]=df.plot(UQ)
+            fig.colorbar(sub_figs[i],ax=ax)
+            ax.set_title('Long-run MCMC')
         except Exception as err:
             print(err)
             pass
@@ -235,11 +246,12 @@ for i,ax in enumerate(axes.flat):
                     print(err)
                     pass
         if found:
-            sub_fig=df.plot(u_std)
-            fig.colorbar(sub_fig,ax=ax)
+            sub_figs[i]=df.plot(u_std)
+            fig.colorbar(sub_figs[i],ax=ax)
         ax.set_title(algs[i-1])
     ax.set_aspect('auto')
 plt.axis([0, 1, 0, 1])
+# fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.1, hspace=0)
 # save plots
 # fig.tight_layout(h_pad=1)

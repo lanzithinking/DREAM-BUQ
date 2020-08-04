@@ -122,8 +122,8 @@ except:
     autoencoder.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
 # algorithms
-algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
-alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC')
+algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC','DRinfmHMC')
+alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC','DR-$\infty$-HMC')
 num_algs=len(algs)
 # obtain estimates
 # folder = './analysis_f_SNR'+str(SNR)
@@ -216,6 +216,7 @@ else:
             f.write(samp_f,algs[i])
 
 # plot
+num_algs-=1
 plt.rcParams['image.cmap'] = 'jet'
 num_rows=3
 # posterior mean
