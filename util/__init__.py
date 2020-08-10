@@ -10,12 +10,9 @@ try:
     from .matplot4dolfin import matplot4dolfin
     from .dolfin_gadget import *
     from .Eigen import *
-    from .multivector import *
-except (ImportError, RuntimeError):
+    # function to calculate effective sample size (ESS)
+    from .bayesianStats import effectiveSampleSize as ess
+    # some handy functions to manipulate scr matrix
+    from .sparse_geeklet import *
+except:
     pass
-
-# function to calculate effective sample size (ESS)
-from .bayesianStats import effectiveSampleSize as ess
-
-# some handy functions to manipulate scr matrix
-from .sparse_geeklet import *

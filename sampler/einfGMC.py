@@ -1,31 +1,29 @@
 #!/usr/bin/env python
 """
-Geometric Infinite dimensional MCMC samplers
-Shiwei Lan @ U of Warwick, 2016
--------------------------------
-Created March 12, 2016
--------------------------------
+Geometric Infinite dimensional MCMC samplers with CNN emulator
+Shiwei Lan @ ASU, 2020
+-----------------------------------
+Originally created October 11, 2016
+-----------------------------------
 Modified Aug. 6, 2020 @ ASU
 """
 __author__ = "Shiwei Lan"
-__copyright__ = "Copyright 2016, The EQUIP/EQUiPS projects"
+__copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "1.2"
+__version__ = "0.1"
 __maintainer__ = "Shiwei Lan"
-__email__ = "S.Lan@warwick.ac.uk; lanzithinking@outlook.com; slan@asu.edu"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
 import timeit,time
 
-class geoinfMC:
+class einfGMC:
     """
-    Geometric Infinite dimensional MCMC samplers by Beskos, Alexandros, Mark Girolami, Shiwei Lan, Patrick E. Farrell, and Andrew M. Stuart.
-    https://www.sciencedirect.com/science/article/pii/S0021999116307033
+    Emulative MCMC samplers by CNN
     -------------------------------------------------------------------
-    It has been configured to use low-rank Hessian approximation.
     After the class is instantiated with arguments, call sample to collect MCMC samples which will be stored in 'result' folder.
     """
-    def __init__(self,parameter_init,model,step_size,step_num,alg_name,adpt_h=False,**kwargs):
+    def __init__(self,parameter_init,model,emul_geom,step_size,step_num,alg_name,adpt_h=False,**kwargs):
         """
         Initialization
         """
@@ -39,8 +37,9 @@ class geoinfMC:
         geom_ord=[0]
         if any(s in alg_name for s in ['MALA','HMC']): geom_ord.append(1)
         if any(s in alg_name for s in ['mMALA','mHMC']): geom_ord.append(2)
-        self.geom=lambda parameter: model.get_geom(parameter,geom_ord=geom_ord,**kwargs)
+        self.geom=lambda parameter: emul_geom(parameter,geom_ord=geom_ord,**kwargs)
         self.ll,self.g,_,self.eigs=self.geom(self.q)
+#         self.ll,self.g,_,self.eigs=self.model.get_geom(self.q,geom_ord,**kwargs)
 
         # sampling setting
         self.h=step_size
@@ -73,7 +72,7 @@ class geoinfMC:
             v = self.model.post_Ga['sample']()
         return v
         
-    def pCN(self):
+    def epCN(self):
         """
         preconditioned Crank-Nicolson
         """
@@ -102,7 +101,7 @@ class geoinfMC:
         # return accept indicator
         return acpt,logr
 
-    def infMALA(self):
+    def einfMALA(self):
         """
         infinite dimensional Metropolis Adjusted Langevin Algorithm
         """
@@ -150,7 +149,7 @@ class geoinfMC:
         # return accept indicator
         return acpt,logr
 
-    def infHMC(self):
+    def einfHMC(self):
         """
         infinite dimensional Hamiltonian Monte Carlo
         """
@@ -213,7 +212,7 @@ class geoinfMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmMALA(self):
+    def eDRinfmMALA(self):
         """
         dimension-reduced infinite dimensional manifold MALA
         """
@@ -262,7 +261,7 @@ class geoinfMC:
         # return accept indicator
         return acpt,logr
 
-    def DRinfmHMC(self):
+    def eDRinfmHMC(self):
         """
         dimension-reduced infinite dimensional manifold HMC
         """
@@ -396,8 +395,6 @@ class geoinfMC:
                     acpt_idx,logr=sampler()
                 except RuntimeError as e:
                     print(e)
-#                     import pydevd; pydevd.settrace()
-#                     import traceback; traceback.print_exc()
                     if num_retry_bad==0:
                         acpt_idx=False; logr=-np.inf
                         print('Bad proposal encountered! Passing... bias introduced.')
