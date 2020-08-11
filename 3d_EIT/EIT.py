@@ -46,7 +46,7 @@ class EIT:
         self.set_pde()
         self.gdim=self.pts.shape[1]
         self.dim=self.tri.shape[0]
-        print('\nPhysical PDE model is defined.')
+        print('Physical PDE model is defined.\n')
         # set up prior
         self.lamb=lamb
         pr_mean=kwargs.pop('pr_mean',np.zeros(self.dim))
@@ -56,12 +56,13 @@ class EIT:
             if (pr_cov!=sps.eye(self.dim)).nnz!=0:
                 L,P=sparse_cholesky(pr_cov)
                 samp=P.dot(L.dot(samp.T)).T
+            if any(pr_mean): samp+=pr_mean
             return samp
         self.prior={'pr_mean':pr_mean,'pr_cov':pr_cov,'sample':lambda n=1: np.squeeze(pr_samp(n))}
-        print('\nPrior model is specified.')
+        print('Prior model is specified.\n')
         # set up misfit
         self.set_misfit(**kwargs)
-        print('\nLikelihood model is obtained.')
+        print('Likelihood model is obtained.\n')
     
     def set_pde(self):
         # construct mesh
@@ -97,16 +98,16 @@ class EIT:
         fname=str(self.gdim)+'d_EIT_dim'+str(self.dim)
         try:
             with open(os.path.join(folder,fname+'.pckl'),'rb') as f:
-                [self.true_perm,obs]=pickle.load(f)
-            print('Data loaded!\n')
+                [self.true_perm,obs]=pickle.load(f)[:2]
+            print('Data loaded!')
         except:
-            print('No data found. Generate new data...\n')
+            print('No data found. Generate new data...')
             mesh_new=mesh.set_perm(self.mesh_obj, anomaly=self.anomaly, background=1.0)
             self.true_perm=mesh_new['perm']
             fs=self.solve(self.true_perm,**kwargs)
             obs=fs.v
             with open(os.path.join(folder,fname+'.pckl'),'wb') as f:
-                pickle.dump([self.true_perm,obs],f)
+                pickle.dump([self.true_perm,obs,self.n_el,self.bbox,self.meshsz,self.el_dist,self.step,self.anomaly,self.lamb],f)
         return obs
     
     def set_misfit(self,obs=None,**kwargs):
@@ -192,13 +193,13 @@ if __name__ == '__main__':
     
     # define inverse problem
     n_el = 16
-    bbox = [[-1,-1],[1,1]]
-    meshsz = .1
-    el_dist, step = 1, 1
-#     el_dist, step = 7, 1
-    anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
-               {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-#     anomaly = None
+    bbox = None#[[-1,-1],[1,1]]
+    meshsz = .2
+#     el_dist, step = 1, 1
+    el_dist, step = 7, 1
+#     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
+#                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
+    anomaly = None
     eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1)
     
     # check gradient
@@ -206,13 +207,14 @@ if __name__ == '__main__':
     u=eit.prior['sample']()
     f,g=eit.get_geom(u,geom_ord=[0,1])[:2]
     v=eit.prior['sample']()
-    h=1e-12
+    h=1e-8
     gv_fd=(eit.get_geom(u+h*v)[0]-f)/h
     reldif=abs(gv_fd-g.dot(v.T))/np.linalg.norm(v)
     print('Relative difference between finite difference and exacted results: {}'.format(reldif))
     
     # obtain MAP as reconstruction of permittivity
     ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre')
+#     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
     
     # plot results
     fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
