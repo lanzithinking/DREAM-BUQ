@@ -21,7 +21,8 @@ from scipy import sparse as sps
 import pyeit.mesh as mesh
 from pyeit.mesh import quality
 import pyeit.mesh.plot as mplot
-from pyeit.eit.fem import Forward
+# from pyeit.eit.fem import Forward
+from fem_ import Forward
 from pyeit.eit.interp2d import sim2pts
 from pyeit.eit.utils import eit_scan_lines
 import pyeit.eit.jac as jac
@@ -81,7 +82,7 @@ class EIT:
         """
         if perm is None: perm=self.true_perm
         parser=kwargs.pop('parser','std')
-        f,_=self.fwd.solve(ex_line,self.step,perm=perm, parser=parser)
+        f,_=self.fwd.solve(ex_line,self.step,perm=perm, parser=parser, **kwargs)
         return f
     
     def solve(self,perm=None,**kwargs):
@@ -90,7 +91,7 @@ class EIT:
         """
         if perm is None: perm=self.true_perm
         parser=kwargs.pop('parser','std')
-        fs=self.fwd.solve_eit(self.ex_mat,self.step,perm=perm, parser=parser)
+        fs=self.fwd.solve_eit(self.ex_mat,self.step,perm=perm, parser=parser, **kwargs)
         return fs
     
     def get_obs(self,**kwargs):
@@ -104,7 +105,7 @@ class EIT:
             print('No data found. Generate new data...')
             mesh_new=mesh.set_perm(self.mesh_obj, anomaly=self.anomaly, background=1.0)
             self.true_perm=mesh_new['perm']
-            fs=self.solve(self.true_perm,**kwargs)
+            fs=self.solve(self.true_perm,skip_jac=True,**kwargs)
             obs=fs.v
             with open(os.path.join(folder,fname+'.pckl'),'wb') as f:
                 pickle.dump([self.true_perm,obs,self.n_el,self.bbox,self.meshsz,self.el_dist,self.step,self.anomaly,self.lamb],f)
@@ -121,7 +122,7 @@ class EIT:
             unknown=self.prior['cov'].dot(unknown)
         
         if any(s>=0 for s in geom_ord):
-            fs=self.solve(unknown)
+            fs=self.solve(unknown,skip_jac=not any(s>0 for s in geom_ord))
             loglik = -0.5*np.sum((self.obs-fs.v)**2)
             if whitened:
 #                 cholC = np.linalg.cholesky(self.prior['cov'])
@@ -186,6 +187,7 @@ class EIT:
     
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    plt.rcParams['image.cmap'] = 'jet'
     import os,sys
     sys.path.append( "../" )
     from util.common_colorbar import common_colorbar
@@ -193,13 +195,13 @@ if __name__ == '__main__':
     
     # define inverse problem
     n_el = 16
-    bbox = None#[[-1,-1],[1,1]]
-    meshsz = .2
-#     el_dist, step = 1, 1
-    el_dist, step = 7, 1
-#     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
-#                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-    anomaly = None
+    bbox = [[-1,-1],[1,1]]
+    meshsz = .03
+    el_dist, step = 1, 1
+#     el_dist, step = 7, 1
+    anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
+               {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
+#     anomaly = None
     eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1)
     
     # check gradient
@@ -217,18 +219,22 @@ if __name__ == '__main__':
 #     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
     
     # plot results
-    fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
-    sub_figs=[None]*2
-    sub_figs[0]=eit.plot(ax=axes.flat[0])
-    axes.flat[0].axis('equal')
-    axes.flat[0].set_title(r'True Conductivities')
-    sub_figs[1]=eit.plot(perm=ds,ax=axes.flat[1])
-    axes.flat[1].axis('equal')
-    axes.flat[1].set_title(r'Reconstructed Conductivities (MAP)')
-    from util.common_colorbar import common_colorbar
-    fig=common_colorbar(fig,axes,sub_figs)
-#     plt.subplots_adjust(wspace=0.2, hspace=0)
-    # save plots
-    # fig.tight_layout(h_pad=1)
-    plt.savefig(os.path.join('./result/'+str(eit.gdim)+'d_reconstruction_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
-    # plt.show()
+    if eit.gdim==2:
+        fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
+        sub_figs=[None]*2
+        sub_figs[0]=eit.plot(ax=axes.flat[0])
+        axes.flat[0].axis('equal')
+        axes.flat[0].set_title(r'True Conductivities')
+        sub_figs[1]=eit.plot(perm=ds,ax=axes.flat[1])
+        axes.flat[1].axis('equal')
+        axes.flat[1].set_title(r'Reconstructed Conductivities (MAP)')
+        from util.common_colorbar import common_colorbar
+        fig=common_colorbar(fig,axes,sub_figs)
+    #     plt.subplots_adjust(wspace=0.2, hspace=0)
+        # save plots
+        # fig.tight_layout(h_pad=1)
+        plt.savefig(os.path.join('./result/'+str(eit.gdim)+'d_reconstruction_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
+        # plt.show()
+    else:
+        eit.plot()
+        eit.plot(perm=ds)
