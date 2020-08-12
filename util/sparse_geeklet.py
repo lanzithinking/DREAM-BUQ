@@ -6,6 +6,7 @@ Shiwei Lan @ U of Warwick, 2016; @ Caltech, Sept. 2016
 
 import numpy as np
 import scipy.sparse as sps
+import scipy.sparse.linalg as spsla
 
 # Convert PETScMatrix to csr_matrix
 # petsc4py must be compiled with dolfin!
@@ -13,8 +14,8 @@ try:
     import dolfin as df
     petscmat2csr = lambda matrix: sps.csr_matrix(tuple(df.as_backend_type(matrix).mat().getValuesCSR()[::-1]),
                                                  shape=(matrix.size(0),matrix.size(1)))
-except ImportError:
-    print('Dolfin not installed!')
+except:
+#     print('Dolfin not properly installed!')
     pass
 
 # Convert csr_matrix to pestc_mat
@@ -22,8 +23,8 @@ except ImportError:
 try:
     from petsc4py import PETSc
     csr2petscmat = lambda matrix,comm=None: PETSc.Mat().createAIJ(size=matrix.shape,csr=(matrix.indptr,matrix.indices,matrix.data),comm=comm)
-except ImportError:
-    print('petsc4py not installed!')
+except:
+#     print('petsc4py not properly installed!')
     pass
 
 ## some functions to efficiently zero-out certain rows in csr matrix ##
@@ -90,3 +91,18 @@ def load_sparse_csr(filename):
     loader = np.load(filename)
     return sps.csr_matrix((  loader['data'], loader['indices'], loader['indptr']),
                          shape = loader['shape'])
+
+def sparse_cholesky(A,**kwargs):
+    """
+    Cholesky decomposition for sparse matrix: the input matrix A must be a sparse symmetric positive semi-definite
+    input: sparse symmetric positive-definite matrix A
+    output: lower triangular factor L and pivot matrix P such that PLL^TP^T=A
+    """
+    n=A.shape[0]
+    lu=spsla.splu(A,**kwargs)
+    if ( lu.perm_r == lu.perm_c ).all() and ( lu.U.diagonal() >= 0 ).all(): # check the matrix A is positive semi-definite.
+        L=lu.L.dot( sps.diags(lu.U.diagonal()**0.5) )
+        P=sps.csc_matrix((np.ones(n),(np.arange(n),lu.perm_r)),shape=(n,)*2)
+        return L,P
+    else:
+        raise Exception('The matrix is not positive semi-definite!')
