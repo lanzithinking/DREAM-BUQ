@@ -12,7 +12,7 @@ from __future__ import division, absolute_import, print_function
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -32,7 +32,7 @@ from util.sparse_geeklet import sparse_cholesky
 import os,pickle
 try:
     from joblib import Parallel, delayed
-    N_JOB=-2 # all but one
+    N_JOB=-2 # all CPUs but one
 except:
     print('WARNING: no parallel environment found.')
 
@@ -96,12 +96,19 @@ class EIT:
     
     def forward(self,input,n_jobs=N_JOB):
 #         import timeit
-        try:
-            solve_i=lambda u: self.solve(perm=u,skip_jac=True).v
-#             t_start=timeit.default_timer()
-            output=Parallel(n_jobs=n_jobs)(delayed(solve_i)(u) for u in input)
-#             print('Time consumed: {}'.format(timeit.default_timer()-t_start))
-        except:
+        par_run=np.ndim(input)>1 and input.shape[0]>1
+        if par_run:
+            try:
+                solve_i=lambda u: self.solve(perm=u,skip_jac=True).v
+                n_jobs=min(n_jobs,input.shape[0])
+    #             t_start=timeit.default_timer()
+                output=Parallel(n_jobs=n_jobs)(delayed(solve_i)(u) for u in input)
+    #             print('Time consumed: {}'.format(timeit.default_timer()-t_start))
+            except:
+                par_run=False
+                print('Parallel run failed. Running in series...')
+                pass
+        if not par_run:
 #             t_start=timeit.default_timer()
             output=np.array([self.solve(perm=u,skip_jac=True).v for u in input])
 #             print('Time consumed: {}'.format(timeit.default_timer()-t_start))
@@ -121,6 +128,8 @@ class EIT:
             self.true_perm=mesh_new['perm']
             fs=self.solve(self.true_perm,skip_jac=True,**kwargs)
             obs=fs.v
+            if np.size(self.nz_var)<np.size(obs): self.nz_var=np.resize(self.nz_var,np.size(obs))
+            obs+=self.nz_var*np.random.randn(np.size(obs))
             if not os.path.exists(folder): os.makedirs(folder)
             with open(os.path.join(folder,fname+'.pckl'),'wb') as f:
                 pickle.dump([self.true_perm,obs,self.n_el,self.bbox,self.meshsz,self.el_dist,self.step,self.anomaly,self.lamb],f)
@@ -139,19 +148,19 @@ class EIT:
         
         if any(s>=0 for s in geom_ord):
             fs=self.solve(unknown,skip_jac=not any(s>0 for s in geom_ord))
-            loglik = -0.5*np.sum((self.obs-fs.v)**2)
+            loglik = -0.5*np.sum((self.obs-fs.v)**2/self.nz_var)
+        
+        if any(s>=1 for s in geom_ord):
+            jac=-fs.jac # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
+            gradlik = np.dot(jac.T,(self.obs-fs.v)/self.nz_var)
             if whitened:
 #                 cholC = np.linalg.cholesky(self.prior['cov'])
                 L,P=sparse_cholesky(self.prior['cov']); cholC=P.dot(L)
                 gradlik = cholC.T.dot(gradlik)
         
-        if any(s>=1 for s in geom_ord):
-            jac=-fs.jac # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
-            gradlik = np.dot(jac.T,self.obs-fs.v)
-        
         if any(s>=1.5 for s in geom_ord):
-            _get_metact_misfit=lambda u_actedon: jac.T.dot(jac.dot(u_actedon)) # GNH
-            _get_rtmetact_misfit=lambda u_actedon: jac.T.dot(u_actedon)
+            _get_metact_misfit=lambda u_actedon: jac.T.dot(jac.dot(u_actedon)/self.nz_var) # GNH
+            _get_rtmetact_misfit=lambda u_actedon: jac.T.dot(u_actedon/sqrt(self.nz_var))
             metact = _get_metact_misfit
             rtmetact = _get_rtmetact_misfit
             if whitened:
@@ -220,7 +229,7 @@ class EIT:
         ---------------------------------------------
         (2D only)
         """
-        if imsz is None: imsz = np.ceil(np.sqrt(np.size(perm))).astype('int')
+        if imsz is None: imsz = np.ceil(np.sqrt(perm.shape[-1])).astype('int')
 #         mask = kwargs.pop('mask',None)
 #         wt_v2i = kwargs.pop('wt_v2i',None)
         if not all(hasattr(self, att) for att in ['mask','wt_v2i']):
@@ -231,11 +240,11 @@ class EIT:
             xyi = np.vstack((xg.flatten(), yg.flatten())).T
             # self.wt_v2i = weight_idw(xy, xyi)
             self.wt_v2i = weight_sigmod(xy, xyi, ratio=.01, s=100)
-        im = np.dot(self.wt_v2i.T, perm)
+        im = perm.dot(self.wt_v2i)
         # im = weight_linear_rbf(xy, xyi, perm)
-        im[self.mask] = 0.
+        im[...,self.mask] = 0.
         # reshape to grid size
-        im = im.reshape((imsz,)*2)
+        im = im.reshape((-1,)+(imsz,)*2 if np.ndim(perm)==2 else (imsz,)*2)
         return im
     
     def img2vec(self,im,**kwargs):
@@ -244,19 +253,19 @@ class EIT:
         ----------------------------------------------
         (2D only)
         """
-        im = im.ravel()
+        imsz = im.shape[1]
+        im = np.squeeze(im.reshape((-1,imsz**2)))
 #         mask = kwargs.pop('mask',None)
 #         wt_i2v = kwargs.pop('wt_i2v',None)
         if not all(hasattr(self, att) for att in ['mask','wt_i2v']):
-            imsz = im.shape[0]
             xg, yg, self.mask = meshgrid(self.pts, n=imsz, gc=kwargs.pop('gc',True), **kwargs)
             # mapping from values on xyi to values on xy
             xy = np.mean(self.pts[self.tri], axis=1)
             xyi = np.vstack((xg.flatten(), yg.flatten())).T
             # self.wt_i2v = weight_idw(xyi, xy)
             self.wt_i2v = weight_sigmod(xyi, xy, ratio=.01, s=100)
-        im[self.mask] = 0.
-        perm = np.dot(self.wt_i2v.T, im)
+        im[...,self.mask] = 0.
+        perm = im.dot(self.wt_i2v)
         return perm
     
 if __name__ == '__main__':
@@ -277,6 +286,7 @@ if __name__ == '__main__':
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
 #     anomaly = None
+    nz_var=1e-2
     eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1)
     
     
@@ -325,29 +335,29 @@ if __name__ == '__main__':
         plt.savefig(os.path.join('./result',str(eit.gdim)+'d_image_conversion_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
     
     
-#     # obtain MAP as reconstruction of permittivity
-#     ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre',maxiter=100)
-# #     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
-#     with open(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.pckl'),'wb') as f:
-#         pickle.dump([ds,n_el,bbox,meshsz,el_dist,step,anomaly],f)
-#     
-#     # plot MAP results
-#     if eit.gdim==2:
-#         fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
-#         sub_figs=[None]*2
-#         sub_figs[0]=eit.plot(ax=axes.flat[0])
-#         axes.flat[0].axis('equal')
-#         axes.flat[0].set_title(r'True Conductivities')
-#         sub_figs[1]=eit.plot(perm=ds,ax=axes.flat[1])
-#         axes.flat[1].axis('equal')
-#         axes.flat[1].set_title(r'Reconstructed Conductivities (MAP)')
-#         from util.common_colorbar import common_colorbar
-#         fig=common_colorbar(fig,axes,sub_figs)
-#     #     plt.subplots_adjust(wspace=0.2, hspace=0)
-#         # save plots
-#         # fig.tight_layout(h_pad=1)
-#         plt.savefig(os.path.join('./result',str(eit.gdim)+'d_reconstruction_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
-#         # plt.show()
-#     else:
-#         eit.plot()
-#         eit.plot(perm=ds)
+    # obtain MAP as reconstruction of permittivity
+    ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre',maxiter=100)
+#     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
+    with open(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.pckl'),'wb') as f:
+        pickle.dump([ds,n_el,bbox,meshsz,el_dist,step,anomaly],f)
+     
+    # plot MAP results
+    if eit.gdim==2:
+        fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
+        sub_figs=[None]*2
+        sub_figs[0]=eit.plot(ax=axes.flat[0])
+        axes.flat[0].axis('equal')
+        axes.flat[0].set_title(r'True Conductivities')
+        sub_figs[1]=eit.plot(perm=ds,ax=axes.flat[1])
+        axes.flat[1].axis('equal')
+        axes.flat[1].set_title(r'Reconstructed Conductivities (MAP)')
+        from util.common_colorbar import common_colorbar
+        fig=common_colorbar(fig,axes,sub_figs)
+    #     plt.subplots_adjust(wspace=0.2, hspace=0)
+        # save plots
+        # fig.tight_layout(h_pad=1)
+        plt.savefig(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
+        # plt.show()
+    else:
+        eit.plot()
+        eit.plot(perm=ds)
