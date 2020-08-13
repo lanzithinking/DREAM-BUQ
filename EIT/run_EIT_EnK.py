@@ -40,7 +40,7 @@ def main():
     u0=eit.prior['sample'](num_samp=args.ensemble_size)
     G=lambda u:eit.forward(u,n_jobs=5)
     y=eit.obs
-    data={'obs':y,'size':y.size,'cov':np.eye(y.size)}
+    data={'obs':y,'size':y.size,'cov':np.diag(eit.nz_var)}
     prior=eit.prior
     
     # EnK parameters
