@@ -38,7 +38,7 @@ def main():
     
     # initialization
     u0=eit.prior['sample'](num_samp=args.ensemble_size)
-    G=eit.forward
+    G=lambda u:eit.forward(u,n_jobs=6)
     y=eit.obs
     data={'obs':y,'size':y.size,'cov':np.eye(y.size)}
     prior=eit.prior
