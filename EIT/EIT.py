@@ -12,7 +12,7 @@ from __future__ import division, absolute_import, print_function
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -30,12 +30,17 @@ import sys
 sys.path.append( '../' )
 from util.sparse_geeklet import sparse_cholesky
 import os,pickle
+try:
+    from joblib import Parallel, delayed
+    N_JOB=4
+except:
+    print('WARNING: no parallel environment found.')
 
 class EIT:
     """
     electrical-impedance tomography (EIT)
     """
-    def __init__(self,n_el=16,bbox=None,meshsz=0.1,el_dist=7,step=1,anomaly=None,lamb=1.,**kwargs):
+    def __init__(self,n_el=16,bbox=None,meshsz=0.1,el_dist=7,step=1,anomaly=None,nz_var=1.,lamb=1.,**kwargs):
         self.n_el=n_el
         self.bbox=bbox
         if self.bbox is None: self.bbox=[[-1,-1,-1], [1,1,1]]
@@ -43,6 +48,7 @@ class EIT:
         self.el_dist,self.step=el_dist,step
         self.anomaly=anomaly
         if self.anomaly is None: self.anomaly=[{'x': 0.40, 'y': 0.40, 'z': 0.0, 'd': 0.30, 'perm': 100.0}]
+        self.nz_var=nz_var
         # set up pde
         self.set_pde()
         self.gdim=self.pts.shape[1]
@@ -52,14 +58,8 @@ class EIT:
         self.lamb=lamb
         pr_mean=kwargs.pop('pr_mean',np.zeros(self.dim))
         pr_cov=kwargs.pop('pr_cov',sps.eye(self.dim)/self.lamb)
-        def pr_samp(n):
-            samp=np.random.randn(n,self.dim)
-            if (pr_cov!=sps.eye(self.dim)).nnz!=0:
-                L,P=sparse_cholesky(pr_cov)
-                samp=P.dot(L.dot(samp.T)).T
-            if any(pr_mean): samp+=pr_mean
-            return samp
-        self.prior={'pr_mean':pr_mean,'pr_cov':pr_cov,'sample':lambda n=1: np.squeeze(pr_samp(n))}
+        self.prior={'mean':pr_mean,'cov':pr_cov}
+        self.prior['sample']=lambda num_samp=1:self.sample(num_samp=num_samp)
         print('Prior model is specified.\n')
         # set up misfit
         self.set_misfit(**kwargs)
@@ -94,6 +94,20 @@ class EIT:
         fs=self.fwd.solve_eit(self.ex_mat,self.step,perm=perm, parser=parser, **kwargs)
         return fs
     
+    def forward(self,input):
+#         import timeit
+        try:
+            solve_i=lambda u: self.solve(perm=u,skip_jac=True).v
+#             t_start=timeit.default_timer()
+            output=Parallel(n_jobs=N_JOB)(delayed(solve_i)(u) for u in input)
+#             print('Time consumed: {}'.format(timeit.default_timer()-t_start))
+        except:
+#             t_start=timeit.default_timer()
+            output=np.array([self.solve(perm=u,skip_jac=True).v for u in input])
+#             print('Time consumed: {}'.format(timeit.default_timer()-t_start))
+#         print(np.allclose(output,output1))
+        return output
+    
     def get_obs(self,**kwargs):
         folder=kwargs.pop('folder','./result')
         fname=str(self.gdim)+'d_EIT_dim'+str(self.dim)
@@ -107,6 +121,7 @@ class EIT:
             self.true_perm=mesh_new['perm']
             fs=self.solve(self.true_perm,skip_jac=True,**kwargs)
             obs=fs.v
+            if not os.path.exists(folder): os.makedirs(folder)
             with open(os.path.join(folder,fname+'.pckl'),'wb') as f:
                 pickle.dump([self.true_perm,obs,self.n_el,self.bbox,self.meshsz,self.el_dist,self.step,self.anomaly,self.lamb],f)
         return obs
@@ -114,6 +129,7 @@ class EIT:
     def set_misfit(self,obs=None,**kwargs):
         self.obs=obs
         if self.obs is None: self.obs=self.get_obs(**kwargs)
+        if np.size(self.nz_var)<np.size(self.obs): self.nz_var=np.resize(self.nz_var,np.size(self.obs))
     
     def get_geom(self,unknown,geom_ord=[0],whitened=False,**kwargs):
         loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
@@ -167,6 +183,19 @@ class EIT:
         ds=map.gn(self.obs,lamb_decay=lamb_decay,lamb_min=lamb_min,maxiter=maxiter,verbose=verbose,**kwargs)
         return ds
     
+    def sample(self,prng=np.random.RandomState(2020),num_samp=1,type='prior'):
+        """
+        Generate sample
+        """
+        samp=None
+        if type=='prior':
+            samp=prng.randn(num_samp,self.dim)
+            if (self.prior['cov']!=sps.eye(self.dim)).nnz!=0:
+                L,P=sparse_cholesky(self.prior['cov'])
+                samp=P.dot(L.dot(samp.T)).T
+            if any(self.prior['mean']): samp+=self.prior['mean']
+        return np.squeeze(samp)
+    
     def plot(self,perm=None,**kwargs):
         import matplotlib.pylab as plt
         if perm is None: perm=self.true_perm
@@ -188,7 +217,7 @@ class EIT:
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     plt.rcParams['image.cmap'] = 'jet'
-    import os,sys
+    import sys
     sys.path.append( "../" )
     from util.common_colorbar import common_colorbar
     np.random.seed(2020)
@@ -196,7 +225,8 @@ if __name__ == '__main__':
     # define inverse problem
     n_el = 16
     bbox = [[-1,-1],[1,1]]
-    meshsz = .03
+    meshsz = .05
+#     meshsz = .2
     el_dist, step = 1, 1
 #     el_dist, step = 7, 1
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
@@ -215,8 +245,10 @@ if __name__ == '__main__':
     print('Relative difference between finite difference and exacted results: {}'.format(reldif))
     
     # obtain MAP as reconstruction of permittivity
-    ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre')
+    ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre',maxiter=100)
 #     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
+    with open(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.pckl'),'wb') as f:
+        pickle.dump([ds,n_el,bbox,meshsz,el_dist,step,anomaly],f)
     
     # plot results
     if eit.gdim==2:
@@ -233,7 +265,7 @@ if __name__ == '__main__':
     #     plt.subplots_adjust(wspace=0.2, hspace=0)
         # save plots
         # fig.tight_layout(h_pad=1)
-        plt.savefig(os.path.join('./result/'+str(eit.gdim)+'d_reconstruction_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
+        plt.savefig(os.path.join('./result',str(eit.gdim)+'d_reconstruction_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
         # plt.show()
     else:
         eit.plot()

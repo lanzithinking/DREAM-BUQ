@@ -1,8 +1,8 @@
 """
-Main function to run Elliptic PDE model (DILI; Cui et~al, 2016) to generate posterior samples
+Main function to run DREAM for nonlinear BBD inverse problem
 Shiwei Lan @ Caltech, 2016
 --------------------------
-Modified for DREAM June 2020 @ ASU
+Modified for DREAM August 2020 @ ASU
 """
 
 # modules
