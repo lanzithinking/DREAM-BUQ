@@ -34,18 +34,19 @@ def main():
     el_dist, step = 1, 1
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1)
+    lamb=1e-1
+    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
     
     # initialization
     u0=eit.prior['sample'](num_samp=args.ensemble_size)
-    G=lambda u:eit.forward(u,n_jobs=5)
+    G=lambda u:eit.forward(np.abs(u),n_jobs=5)
     y=eit.obs
     data={'obs':y,'size':y.size,'cov':np.diag(eit.nz_var)}
     prior=eit.prior
     
     # EnK parameters
-    nz_lvl=1
-    err_thld=1e-1
+    nz_lvl=.5
+    err_thld=1e-2
     
     # run EnK to generate ensembles
     print("Preparing %s with step size %g ..."
@@ -60,7 +61,8 @@ def main():
     filename=os.path.join(savepath,'EIT_'+filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-    pickle.dump([n_el,bbox,meshsz,el_dist,step,anomaly,y,args],f)
+    soln_count=eit.soln_count
+    pickle.dump([n_el,bbox,meshsz,el_dist,step,anomaly,y,soln_count,args],f)
     f.close()
 
 if __name__ == '__main__':

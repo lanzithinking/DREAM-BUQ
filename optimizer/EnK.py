@@ -106,12 +106,12 @@ class EnK(object):
             C_uu=np.cov(self.u,rowvar=False)
             if self.adpt: alpha/=np.sqrt(np.sum(d*C_pp.dot(d))*(self.J-1))*alpha+self.eps
 #             print(alpha)
-            try:
-#             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),u_.T).T
-#             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d/alpha*self.h)).T
-                self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d)).T
-            except:
-                self.u=self.prior['cov'].dot(np.linalg.solve(self.prior['cov']+alpha*C_uu,self.u.T+C_up.dot(d))).T
+#             try:
+# #             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),u_.T).T
+# #             self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d/alpha*self.h)).T
+#                 self.u=np.linalg.solve(np.eye(self.D)+alpha*C_uu.dot(np.linalg.inv(self.prior['cov'])),self.u.T+C_up.dot(d)).T
+#             except:
+            self.u=self.prior['cov'].dot(np.linalg.solve(self.prior['cov']+alpha*C_uu,self.u.T+C_up.dot(d))).T
             self.u+=np.random.multivariate_normal(np.zeros(self.D),2*alpha*C_uu,self.J)
         
         return err,p

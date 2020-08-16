@@ -155,3 +155,84 @@ class Forward(Forward):
                 jac[:, i] = np.dot(np.dot(r_el[:, e], ke[i]), f[e])
 
         return f, jac
+    
+    def get_mass(self):
+        # 1. calculate local mass matrix (on each element)
+        me = calculate_me(self.pts, self.tri)
+
+        # 2. assemble to global M
+        me = assemble_sparse(me, self.tri, np.ones(self.n_tri), self.n_pts, ref=self.ref)
+        
+        return me
+
+def calculate_me(pts, tri):
+    """
+    Calculate local mass matrix on all elements.
+
+    Parameters
+    ----------
+    pts: NDArray
+        Nx2 (x,y) or Nx3 (x,y,z) coordinates of points
+    tri: NDArray
+        Mx3 (triangle) or Mx4 (tetrahedron) connectivity of elements
+
+    Returns
+    -------
+    me_array: NDArray
+        n_tri x (n_dim x n_dim) 3d matrix
+    """
+    n_tri, n_vertices = tri.shape
+
+    # check dimension
+    # '3' : triangles
+    # '4' : tetrahedrons
+    if n_vertices == 3:
+        _m_local = _m_triangle
+    elif n_vertices == 4:
+        _m_local = _m_tetrahedron
+    else:
+        raise TypeError('The num of vertices of elements must be 3 or 4')
+
+    # default data types for me
+    me_array = np.zeros((n_tri, n_vertices, n_vertices))
+    for ei in range(n_tri):
+        no = tri[ei, :]
+        xy = pts[no]
+
+        # compute the MIJ
+        me = _m_local(xy)
+        me_array[ei] = me
+
+    return me_array
+
+
+def _m_triangle(xy):
+    """
+    given a point-matrix of an element, solving for Mij analytically
+    using barycentric coordinates (simplex coordinates)
+
+    Parameters
+    ----------
+    xy: NDArray
+        (x,y) of nodes 1,2,3 given in counterclockwise manner
+
+    Returns
+    -------
+    me_matrix: NDArray
+        local stiffness matrix
+    """
+    # edges (vector) of triangles
+    s = xy[[2, 0, 1]] - xy[[1, 2, 0]]
+    # s1 = xy[2, :] - xy[1, :]
+    # s2 = xy[0, :] - xy[2, :]
+    # s3 = xy[1, :] - xy[0, :]
+
+    # area of triangles
+    # TODO: remove abs, user must make sure all triangles are CCW.
+    # at = 0.5 * la.det(s[[0, 1]])
+    at = np.abs(0.5 * det2x2(s[0], s[1]))
+
+    # (e for element) local stiffness matrix
+    me_matrix = (np.eye(3)+np.ones(3))/12 * at
+
+    return me_matrix

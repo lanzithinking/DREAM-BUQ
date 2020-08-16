@@ -12,12 +12,13 @@ from __future__ import division, absolute_import, print_function
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import numpy as np
 from scipy import sparse as sps
+import scipy.spatial.distance as spd
 import pyeit.mesh as mesh
 from pyeit.mesh import quality
 import pyeit.mesh.plot as mplot
@@ -28,12 +29,13 @@ from pyeit.eit.utils import eit_scan_lines
 import pyeit.eit.jac as jac
 import sys
 sys.path.append( '../' )
-from util.sparse_geeklet import sparse_cholesky
+from util.sparse_geeklet import csr_trim0,sparse_cholesky
 import os,pickle
 try:
     from joblib import Parallel, delayed
     N_JOB=-2 # all CPUs but one
 except:
+    N_JOB=1
     print('WARNING: no parallel environment found.')
 
 class EIT:
@@ -49,15 +51,17 @@ class EIT:
         self.anomaly=anomaly
         if self.anomaly is None: self.anomaly=[{'x': 0.40, 'y': 0.40, 'z': 0.0, 'd': 0.30, 'perm': 100.0}]
         self.nz_var=nz_var
+        self.lamb=lamb
         # set up pde
         self.set_pde()
         self.gdim=self.pts.shape[1]
         self.dim=self.tri.shape[0]
+#         self.M=self.fwd.get_mass()
         print('Physical PDE model is defined.\n')
         # set up prior
-        self.lamb=lamb
         pr_mean=kwargs.pop('pr_mean',np.zeros(self.dim))
-        pr_cov=kwargs.pop('pr_cov',sps.eye(self.dim)/self.lamb)
+#         pr_cov=kwargs.pop('pr_cov',sps.eye(self.dim)/self.lamb)
+        pr_cov=kwargs.pop('pr_cov',self.get_ker(sigma=kwargs.pop('sigma',1),rho=kwargs.pop('rho',.05))/self.lamb)
         self.prior={'mean':pr_mean,'cov':pr_cov}
         self.prior['sample']=lambda num_samp=1:self.sample(num_samp=num_samp)
         print('Prior model is specified.\n')
@@ -75,6 +79,8 @@ class EIT:
         self.fwd=Forward(self.mesh_obj, self.el_pos)
         # boundary condition
         self.ex_mat=eit_scan_lines(self.n_el,self.el_dist)
+         # count PDE solving times
+        self.soln_count = np.zeros(2)
     
     def _soln_fwd(self,ex_line,perm=None,**kwargs):
         """
@@ -83,7 +89,7 @@ class EIT:
         if perm is None: perm=self.true_perm
         parser=kwargs.pop('parser','std')
         f,_=self.fwd.solve(ex_line,self.step,perm=perm, parser=parser, **kwargs)
-        return f
+        return np.real(f)
     
     def solve(self,perm=None,**kwargs):
         """
@@ -91,7 +97,10 @@ class EIT:
         """
         if perm is None: perm=self.true_perm
         parser=kwargs.pop('parser','std')
-        fs=self.fwd.solve_eit(self.ex_mat,self.step,perm=perm, parser=parser, **kwargs)
+        skip_jac=kwargs.pop('skip_jac',False)
+        fs=self.fwd.solve_eit(self.ex_mat,self.step,perm=perm, parser=parser, skip_jac=skip_jac, **kwargs)
+#         if not all(np.isreal(fs.v)): print('Oh! Non-real output!')
+        self.soln_count[0]+=1; self.soln_count[1]+=not skip_jac
         return fs
     
     def forward(self,input,n_jobs=N_JOB):
@@ -115,21 +124,40 @@ class EIT:
 #         print(np.allclose(output,output1))
         return output
     
+    def get_ker(self,**kwargs):
+        """
+        Get the kernel matrix K with K_ij = k(x_i,x_j).
+        """
+#         folder=kwargs.pop('folder','./result')
+#         fname=str(self.gdim)+'d_EIT_meshpdist_dim'+str(self.dim)
+#         try:
+#             pDist=np.load(os.path.join(folder,fname+'.npz'))['ker_dist']
+#             print('Pairwise distance '+fname+' loaded!')
+#         except:
+        pDist=spd.pdist(np.mean(self.pts[self.tri], axis=1))
+#             if not os.path.exists(folder): os.makedirs(folder)
+#             np.savez_compressed(file=os.path.join(folder,fname),ker_dist=pDist)
+        sigma=kwargs.pop('sigma',1.)
+        rho=kwargs.pop('rho',.05)
+        K = sps.csr_matrix(sigma**2*np.exp(-spd.squareform(pDist)/(2*rho)))
+        csr_trim0(K,1e-10)
+        return K
+    
     def get_obs(self,**kwargs):
         folder=kwargs.pop('folder','./result')
         fname=str(self.gdim)+'d_EIT_dim'+str(self.dim)
         try:
             with open(os.path.join(folder,fname+'.pckl'),'rb') as f:
                 [self.true_perm,obs]=pickle.load(f)[:2]
-            print('Data loaded!')
+            print('Data '+fname+' loaded!')
         except:
             print('No data found. Generate new data...')
             mesh_new=mesh.set_perm(self.mesh_obj, anomaly=self.anomaly, background=1.0)
             self.true_perm=mesh_new['perm']
             fs=self.solve(self.true_perm,skip_jac=True,**kwargs)
             obs=fs.v
-            if np.size(self.nz_var)<np.size(obs): self.nz_var=np.resize(self.nz_var,np.size(obs))
-            obs+=self.nz_var*np.random.randn(np.size(obs))
+#             if np.size(self.nz_var)<np.size(obs): self.nz_var=np.resize(self.nz_var,np.size(obs))
+#             obs+=np.sqrt(self.nz_var)*np.random.randn(np.size(obs)) # voltage must be positive!
             if not os.path.exists(folder): os.makedirs(folder)
             with open(os.path.join(folder,fname+'.pckl'),'wb') as f:
                 pickle.dump([self.true_perm,obs,self.n_el,self.bbox,self.meshsz,self.el_dist,self.step,self.anomaly,self.lamb],f)
@@ -146,6 +174,9 @@ class EIT:
         if whitened:
             unknown=self.prior['cov'].dot(unknown)
         
+        force_posperm=kwargs.pop('force_posperm',False)
+        if force_posperm: unknown=np.abs(unknown)
+        
         if any(s>=0 for s in geom_ord):
             fs=self.solve(unknown,skip_jac=not any(s>0 for s in geom_ord))
             loglik = -0.5*np.sum((self.obs-fs.v)**2/self.nz_var)
@@ -153,9 +184,13 @@ class EIT:
         if any(s>=1 for s in geom_ord):
             jac=-fs.jac # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
             gradlik = np.dot(jac.T,(self.obs-fs.v)/self.nz_var)
+#             gradlik = self.M.dot(gradlik)
             if whitened:
 #                 cholC = np.linalg.cholesky(self.prior['cov'])
-                L,P=sparse_cholesky(self.prior['cov']); cholC=P.dot(L)
+                if not all(key in self.prior for key in ['L','P']):
+                    L,P=sparse_cholesky(self.prior['cov'])
+                    self.prior['L']=L; self.prior['P']=P
+                cholC=self.prior['P'].dot(self.prior['L'])
                 gradlik = cholC.T.dot(gradlik)
         
         if any(s>=1.5 for s in geom_ord):
@@ -199,9 +234,10 @@ class EIT:
         samp=None
         if type=='prior':
             samp=np.random.randn(num_samp,self.dim)
-            if (self.prior['cov']!=sps.eye(self.dim)).nnz!=0:
+            if not all(key in self.prior for key in ['L','P']):
                 L,P=sparse_cholesky(self.prior['cov'])
-                samp=P.dot(L.dot(samp.T)).T
+                self.prior['L']=L; self.prior['P']=P
+            samp=self.prior['P'].dot(self.prior['L'].dot(samp.T)).T
             if any(self.prior['mean']): samp+=self.prior['mean']
         return np.squeeze(samp)
     
@@ -286,8 +322,8 @@ if __name__ == '__main__':
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
 #     anomaly = None
-    nz_var=1e-2
-    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1)
+    lamb=1e-1
+    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
     
     
     # check gradient
@@ -295,51 +331,55 @@ if __name__ == '__main__':
     u=eit.prior['sample']()
     f,g=eit.get_geom(u,geom_ord=[0,1])[:2]
     v=eit.prior['sample']()
-    h=1e-8
+    h=1e-9
     gv_fd=(eit.get_geom(u+h*v)[0]-f)/h
     reldif=abs(gv_fd-g.dot(v.T))/np.linalg.norm(v)
     print('Relative difference between finite difference and exacted results: {}'.format(reldif))
     
     
-    # check image conversion
-#     demo()
-    if eit.gdim==2:
-        fig,axes = plt.subplots(nrows=1,ncols=3,sharex=True,sharey=False,figsize=(16,5))
-        ax=axes.flat[0]
-#         ax.set_aspect('equal')
-        subfig=eit.plot(ax=ax)
-        ax.set_title(r'Original')
-        cax = fig.add_axes([ax.get_position().x1+0.002,ax.get_position().y0,0.01,ax.get_position().height])
-        fig.colorbar(subfig, cax=cax)
-        
-        ax=axes.flat[1]
-#         ax.set_aspect('equal')
-        im=eit.vec2img(eit.true_perm)
-#         subfig=ax.imshow(im,origin='lower')
-        ax.triplot(eit.pts[:, 0], eit.pts[:, 1], eit.tri, alpha=0.5)
-        xg, yg, mask = meshgrid(eit.pts,n=im.shape[0])
-        subfig=ax.pcolor(xg, yg, im, edgecolors=None, linewidth=0, alpha=0.8)
-        ax.set_title(r'Converted Image')
-        cax = fig.add_axes([ax.get_position().x1+0.005,ax.get_position().y0,0.01,ax.get_position().height])
-        fig.colorbar(subfig, cax=cax)
-        
-        ax=axes.flat[2]
-#         ax.set_aspect('equal')
-        perm_rec=eit.img2vec(im)
-        subfig=eit.plot(perm_rec,ax=ax)
-        ax.set_title(r'Recovered')
-        cax = fig.add_axes([ax.get_position().x1+0.01,ax.get_position().y0,0.01,ax.get_position().height])
-        fig.colorbar(subfig, cax=cax)
-        
-        plt.subplots_adjust(wspace=0.4, hspace=0)
-        plt.savefig(os.path.join('./result',str(eit.gdim)+'d_image_conversion_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
+#     # check image conversion
+# #     demo()
+#     if eit.gdim==2:
+#         fig,axes = plt.subplots(nrows=1,ncols=3,sharex=True,sharey=False,figsize=(16,5))
+#         ax=axes.flat[0]
+# #         ax.set_aspect('equal')
+#         subfig=eit.plot(ax=ax)
+#         ax.set_title(r'Original')
+#         cax = fig.add_axes([ax.get_position().x1+0.002,ax.get_position().y0,0.01,ax.get_position().height])
+#         fig.colorbar(subfig, cax=cax)
+#         
+#         ax=axes.flat[1]
+# #         ax.set_aspect('equal')
+#         im=eit.vec2img(eit.true_perm)
+# #         subfig=ax.imshow(im,origin='lower')
+#         ax.triplot(eit.pts[:, 0], eit.pts[:, 1], eit.tri, alpha=0.5)
+#         xg, yg, mask = meshgrid(eit.pts,n=im.shape[0])
+#         subfig=ax.pcolor(xg, yg, im, edgecolors=None, linewidth=0, alpha=0.8)
+#         ax.set_title(r'Converted Image')
+#         cax = fig.add_axes([ax.get_position().x1+0.005,ax.get_position().y0,0.01,ax.get_position().height])
+#         fig.colorbar(subfig, cax=cax)
+#         
+#         ax=axes.flat[2]
+# #         ax.set_aspect('equal')
+#         perm_rec=eit.img2vec(im)
+#         subfig=eit.plot(perm_rec,ax=ax)
+#         ax.set_title(r'Recovered')
+#         cax = fig.add_axes([ax.get_position().x1+0.01,ax.get_position().y0,0.01,ax.get_position().height])
+#         fig.colorbar(subfig, cax=cax)
+#         
+#         plt.subplots_adjust(wspace=0.4, hspace=0)
+#         plt.savefig(os.path.join('./result',str(eit.gdim)+'d_image_conversion_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
     
     
     # obtain MAP as reconstruction of permittivity
-    ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre',maxiter=100)
-#     ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre')
-    with open(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.pckl'),'wb') as f:
-        pickle.dump([ds,n_el,bbox,meshsz,el_dist,step,anomaly],f)
+    try:
+        with open(os.path.join('./result',str(eit.gdim)+'d_EIT_MAP_dim'+str(eit.dim)+'.pckl'),'rb') as f:
+            ds=pickle.load(f)[0]
+    except:
+        ds=eit.get_MAP(lamb_decay=0.1,lamb=1e-3, method='kotre',maxiter=100)
+#         ds=eit.get_MAP(lamb_decay=0.2,lamb=1e-2, method='kotre', maxiter=100)
+        with open(os.path.join('./result',str(eit.gdim)+'d_EIT_MAP_dim'+str(eit.dim)+'.pckl'),'wb') as f:
+            pickle.dump([ds,n_el,bbox,meshsz,el_dist,step,anomaly],f)
      
     # plot MAP results
     if eit.gdim==2:
@@ -356,7 +396,7 @@ if __name__ == '__main__':
     #     plt.subplots_adjust(wspace=0.2, hspace=0)
         # save plots
         # fig.tight_layout(h_pad=1)
-        plt.savefig(os.path.join('./result',str(eit.gdim)+'d_MAP_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
+        plt.savefig(os.path.join('./result',str(eit.gdim)+'d_EIT_MAP_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
         # plt.show()
     else:
         eit.plot()
