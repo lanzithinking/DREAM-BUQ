@@ -61,15 +61,15 @@ class EnK(object):
         # algorithm specific parameters
         self.h=stp_sz
         self.r=nz_lvl
+        self.alg=alg
         self.tau=kwargs.pop('err_thld',.1) # default to be .1
         self.reg=kwargs.pop('reg',False) # default to be false
-        if self.reg:
+        if self.reg and self.alg=='EKI':
             self.rho=kwargs.pop('reg_thld',0.5) # default to be 0.5
             self.tau=max(self.tau,1/self.rho) # tau >=1/rho
         self.adpt=kwargs.pop('adpt',True) # default to be true
         if self.adpt:
             self.eps=kwargs.pop('adpt_par',self.tau)
-        self.alg=alg
     
     # update ensemble sates
     def update(self):
