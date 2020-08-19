@@ -22,10 +22,10 @@ np.random.seed(2020)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
-    parser.add_argument('num_samp', nargs='?', type=int, default=2000)
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
+    parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.01,1.,.02,None,None])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.05,.1,.05,None,None])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -33,12 +33,12 @@ def main():
     ## define the EIT inverse problem ##
     n_el = 16
     bbox = [[-1,-1],[1,1]]
-    meshsz = .05
+    meshsz = .04
     el_dist, step = 1, 1
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-    lamb=1e-1
-    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
+    nz_var=1e-2; lamb=1e-1; rho=.25
+    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,rho=rho)
     y=eit.obs
     
     # initialization

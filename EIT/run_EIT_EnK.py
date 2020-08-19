@@ -30,16 +30,16 @@ def main():
     ## define the EIT inverse problem ##
     n_el = 16
     bbox = [[-1,-1],[1,1]]
-    meshsz = .05
+    meshsz = .04
     el_dist, step = 1, 1
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-    lamb=1e-1
-    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
+    nz_var=1e-2; lamb=1e-1; rho=.25
+    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,rho=rho)
     
     # initialization
     u0=eit.prior['sample'](num_samp=args.ensemble_size)
-    G=lambda u:eit.forward(np.abs(u),n_jobs=5)
+    G=lambda u:eit.forward(np.abs(u),n_jobs=10)
     y=eit.obs
     data={'obs':y,'size':y.size,'cov':np.diag(eit.nz_var)}
     prior=eit.prior

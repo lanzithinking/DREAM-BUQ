@@ -14,15 +14,15 @@ from util.common_colorbar import common_colorbar
 ## define the EIT inverse problem ##
 n_el = 16
 bbox = [[-1,-1],[1,1]]
-meshsz = .05
+meshsz = .04
 el_dist, step = 1, 1
 anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
            {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-lamb=1e-3
-eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
+nz_var=1e-2; lamb=1e-1; rho=.25
+eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,rho=rho)
 
 # # initialization
-ensbl_sz=100
+ensbl_sz=500
 # unknown=eit.prior['sample'](num_samp=ensbl_sz)
 # # define parameters needed
 # G=lambda u:eit.forward(u,n_jobs=5)
@@ -35,7 +35,7 @@ ensbl_sz=100
 # err_thld=1e-1
 algs=['EKI','EKS']
 num_algs=len(algs)
-max_iter=50
+max_iter=10
 
 # #### EKI ####
 # eki=EnK(unknown,G,data,eit.prior,stp_sz=stp_sz[0],nz_lvl=nz_lvl,err_thld=err_thld,alg=algs[0],reg=True)
@@ -74,8 +74,8 @@ else:
                 try:
                     f=open(os.path.join(folder,f_i),'rb')
                     loaded=pickle.load(f)
-                    ensbl=loaded[3][:-1,:,:]
-#                     ensbl=np.exp(loaded[3][:-1,:,:])
+#                     ensbl=loaded[3][:-1,:,:]
+                    ensbl=np.abs(loaded[3][:-1,:,:])
                     for n in range(loaded[-2]+1):
                         if n+1 in prog:
                             print('{0:.0f}% ensembles have been retrieved.'.format(np.float(n+1)/max_iter*100))

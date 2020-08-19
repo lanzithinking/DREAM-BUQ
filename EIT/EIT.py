@@ -12,7 +12,7 @@ from __future__ import division, absolute_import, print_function
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.5"
+__version__ = "0.6"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -54,8 +54,7 @@ class EIT:
         self.lamb=lamb
         # set up pde
         self.set_pde()
-        self.gdim=self.pts.shape[1]
-        self.dim=self.tri.shape[0]
+        self.dim,self.gdim=self.pts.shape
 #         self.M=self.fwd.get_mass()
         print('Physical PDE model is defined.\n')
         # set up prior
@@ -88,7 +87,7 @@ class EIT:
         """
         if perm is None: perm=self.true_perm
         parser=kwargs.pop('parser','std')
-        f,_=self.fwd.solve(ex_line,self.step,perm=perm, parser=parser, **kwargs)
+        f,_=self.fwd.solve(ex_line,perm=perm, **kwargs)
         return np.real(f)
     
     def solve(self,perm=None,**kwargs):
@@ -103,9 +102,18 @@ class EIT:
         self.soln_count[0]+=1; self.soln_count[1]+=not skip_jac
         return fs
     
+    def _pts2sim(self,pts_values):
+#         el_value = pts2sim(self.tri, pts_values)
+        el_value = np.mean(pts_values[...,self.tri], axis=np.ndim(pts_values))
+        return el_value
+    
+    def _sim2pts(self,sim_values):
+        return sim2pts(self.pts, self.tri, sim_values)
+    
     def forward(self,input,n_jobs=N_JOB):
 #         import timeit
         par_run=np.ndim(input)>1 and input.shape[0]>1
+        if input.shape[-1]!=self.fwd.n_tri: input=self._pts2sim(input)
         if par_run:
             try:
                 solve_i=lambda u: self.solve(perm=u,skip_jac=True).v
@@ -134,13 +142,13 @@ class EIT:
 #             pDist=np.load(os.path.join(folder,fname+'.npz'))['ker_dist']
 #             print('Pairwise distance '+fname+' loaded!')
 #         except:
-        pDist=spd.pdist(np.mean(self.pts[self.tri], axis=1))
+        pDist=spd.pdist(self.pts)
 #             if not os.path.exists(folder): os.makedirs(folder)
 #             np.savez_compressed(file=os.path.join(folder,fname),ker_dist=pDist)
         sigma=kwargs.pop('sigma',1.)
         rho=kwargs.pop('rho',.05)
         K = sps.csr_matrix(sigma**2*np.exp(-spd.squareform(pDist)/(2*rho)))
-        csr_trim0(K,1e-10)
+        csr_trim0(K,1e-8)
         return K
     
     def get_obs(self,**kwargs):
@@ -168,6 +176,11 @@ class EIT:
         if self.obs is None: self.obs=self.get_obs(**kwargs)
         if np.size(self.nz_var)<np.size(self.obs): self.nz_var=np.resize(self.nz_var,np.size(self.obs))
     
+    def _d_pts2sim(self):
+        n_vertices = self.tri.shape[1]
+        indptr = np.arange(self.tri.size+1,step=n_vertices,dtype='int')
+        return sps.csr_matrix((np.ones(self.tri.size)/n_vertices,self.tri.ravel(),indptr),shape=(self.fwd.n_tri,self.dim))
+    
     def get_geom(self,unknown,geom_ord=[0],whitened=False,**kwargs):
         loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
         
@@ -175,15 +188,22 @@ class EIT:
             unknown=self.prior['cov'].dot(unknown)
         
         force_posperm=kwargs.pop('force_posperm',False)
-        if force_posperm: unknown=np.abs(unknown)
+        if len(unknown)==self.dim:
+            perm=self._pts2sim(unknown) # unknown is a vector of nodal values
+        elif len(unknown)==self.fwd.n_tri:
+            perm=unknown
+        if force_posperm:
+            sign_unknown=np.sign(unknown)
+            perm=np.abs(perm)
         
         if any(s>=0 for s in geom_ord):
-            fs=self.solve(unknown,skip_jac=not any(s>0 for s in geom_ord))
+            fs=self.solve(perm=perm,skip_jac=not any(s>0 for s in geom_ord))
             loglik = -0.5*np.sum((self.obs-fs.v)**2/self.nz_var)
         
         if any(s>=1 for s in geom_ord):
-            jac=-fs.jac # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
-            gradlik = np.dot(jac.T,(self.obs-fs.v)/self.nz_var)
+            jacT=-self._d_pts2sim().T.dot(fs.jac.T) # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
+            gradlik = np.dot(jacT,(self.obs-fs.v)/self.nz_var)
+            if force_posperm: gradlik*=sign_unknown
 #             gradlik = self.M.dot(gradlik)
             if whitened:
 #                 cholC = np.linalg.cholesky(self.prior['cov'])
@@ -194,8 +214,8 @@ class EIT:
                 gradlik = cholC.T.dot(gradlik)
         
         if any(s>=1.5 for s in geom_ord):
-            _get_metact_misfit=lambda u_actedon: jac.T.dot(jac.dot(u_actedon)/self.nz_var) # GNH
-            _get_rtmetact_misfit=lambda u_actedon: jac.T.dot(u_actedon/sqrt(self.nz_var))
+            _get_metact_misfit=lambda u_actedon: jacT.dot(jacT.T.dot(self._pts2sim(u_actedon))/self.nz_var) # GNH
+            _get_rtmetact_misfit=lambda u_actedon: jacT.dot(u_actedon/sqrt(self.nz_var))
             metact = _get_metact_misfit
             rtmetact = _get_rtmetact_misfit
             if whitened:
@@ -241,49 +261,56 @@ class EIT:
             if any(self.prior['mean']): samp+=self.prior['mean']
         return np.squeeze(samp)
     
-    def plot(self,perm=None,**kwargs):
+    def plot(self,input=None,**kwargs):
         import matplotlib.pylab as plt
-        if perm is None: perm=self.true_perm
+        if input is None: input=self.true_perm
         if 'ax' in kwargs:
             ax=kwargs.pop('ax')
             if self.gdim==2:
-                im=ax.tripcolor(self.pts[:,0],self.pts[:,1],self.tri,np.real(perm),shading='flat')
+                if len(input)==self.dim: input=self._pts2sim(input)
+                im=ax.tripcolor(self.pts[:,0],self.pts[:,1],self.tri,np.real(input),shading='flat')
             elif self.gdim==3:
+                if len(input)==self.fwd.n_tri: input=self._sim2pts(input)
                 plt.axes(ax)
-                im=mplot.tetplot(self.pts,self.tri,vertex_color=sim2pts(self.pts,self.tri,np.real(perm)),alpha=1.0)
+                im=mplot.tetplot(self.pts,self.tri,vertex_color=np.real(input),alpha=1.0)
             return im
         else:
             if self.gdim==2:
-                plt.tripcolor(self.pts[:,0],self.pts[:,1],self.tri,np.real(perm),shading='flat')
+                if len(input)==self.dim: input=self._pts2sim(input)
+                plt.tripcolor(self.pts[:,0],self.pts[:,1],self.tri,np.real(input),shading='flat')
             elif self.gdim==3:
-                mplot.tetplot(self.pts,self.tri,vertex_color=sim2pts(self.pts,self.tri,np.real(perm)),alpha=1.0)
+                if len(input)==self.fwd.n_tri: input=self._sim2pts(input)
+                mplot.tetplot(self.pts,self.tri,vertex_color=np.real(input),alpha=1.0)
             plt.show()
     
-    def vec2img(self,perm,imsz=None,**kwargs):
+    def vec2img(self,input,imsz=None,**kwargs):
         """
         Convert vector over mesh to image as a matrix
         ---------------------------------------------
         (2D only)
         """
-        if imsz is None: imsz = np.ceil(np.sqrt(perm.shape[-1])).astype('int')
+        if imsz is None: imsz = np.ceil(np.sqrt(input.shape[-1])).astype('int')
 #         mask = kwargs.pop('mask',None)
 #         wt_v2i = kwargs.pop('wt_v2i',None)
         if not all(hasattr(self, att) for att in ['mask','wt_v2i']):
             xg, yg, self.mask = meshgrid(self.pts, n=imsz, gc=kwargs.pop('gc',True), **kwargs)
 #             im = np.ones_like(mask)
             # mapping from values on xy to values on xyi
-            xy = np.mean(self.pts[self.tri], axis=1)
+            if input.shape[-1]==self.dim:
+                xy = self.pts
+            elif input.shape[-1]==self.fwd.n_tri:
+                xy = np.mean(self.pts[self.tri], axis=1)
             xyi = np.vstack((xg.flatten(), yg.flatten())).T
             # self.wt_v2i = weight_idw(xy, xyi)
             self.wt_v2i = weight_sigmod(xy, xyi, ratio=.01, s=100)
-        im = perm.dot(self.wt_v2i)
-        # im = weight_linear_rbf(xy, xyi, perm)
+        im = input.dot(self.wt_v2i)
+        # im = weight_linear_rbf(xy, xyi, input)
         im[...,self.mask] = 0.
         # reshape to grid size
-        im = im.reshape((-1,)+(imsz,)*2 if np.ndim(perm)==2 else (imsz,)*2)
+        im = im.reshape((-1,)+(imsz,)*2 if np.ndim(input)==2 else (imsz,)*2)
         return im
     
-    def img2vec(self,im,**kwargs):
+    def img2vec(self,im,out_opt='node',**kwargs):
         """
         Convert image matrix to vector value over mesh
         ----------------------------------------------
@@ -296,13 +323,16 @@ class EIT:
         if not all(hasattr(self, att) for att in ['mask','wt_i2v']):
             xg, yg, self.mask = meshgrid(self.pts, n=imsz, gc=kwargs.pop('gc',True), **kwargs)
             # mapping from values on xyi to values on xy
-            xy = np.mean(self.pts[self.tri], axis=1)
+            if out_opt=='node':
+                xy = self.pts
+            elif out_opt=='cell':
+                xy = np.mean(self.pts[self.tri], axis=1)
             xyi = np.vstack((xg.flatten(), yg.flatten())).T
             # self.wt_i2v = weight_idw(xyi, xy)
             self.wt_i2v = weight_sigmod(xyi, xy, ratio=.01, s=100)
         im[...,self.mask] = 0.
-        perm = im.dot(self.wt_i2v)
-        return perm
+        output = im.dot(self.wt_i2v)
+        return output
     
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -315,24 +345,24 @@ if __name__ == '__main__':
     # define inverse problem
     n_el = 16
     bbox = [[-1,-1],[1,1]]
-    meshsz = .05
+    meshsz = .04
 #     meshsz = .2
     el_dist, step = 1, 1
 #     el_dist, step = 7, 1
     anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
                {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
 #     anomaly = None
-    lamb=1e-1
-    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
+    nz_var=1e-2; lamb=1e-1; rho=.25
+    eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,rho=rho)
     
     
     # check gradient
 #     u=eit.true_perm
     u=eit.prior['sample']()
-    f,g=eit.get_geom(u,geom_ord=[0,1])[:2]
+    f,g=eit.get_geom(u,geom_ord=[0,1],force_posperm=True)[:2]
     v=eit.prior['sample']()
     h=1e-9
-    gv_fd=(eit.get_geom(u+h*v)[0]-f)/h
+    gv_fd=(eit.get_geom(u+h*v,force_posperm=True)[0]-f)/h
     reldif=abs(gv_fd-g.dot(v.T))/np.linalg.norm(v)
     print('Relative difference between finite difference and exacted results: {}'.format(reldif))
     
@@ -347,7 +377,7 @@ if __name__ == '__main__':
 #         ax.set_title(r'Original')
 #         cax = fig.add_axes([ax.get_position().x1+0.002,ax.get_position().y0,0.01,ax.get_position().height])
 #         fig.colorbar(subfig, cax=cax)
-#         
+#           
 #         ax=axes.flat[1]
 # #         ax.set_aspect('equal')
 #         im=eit.vec2img(eit.true_perm)
@@ -358,7 +388,7 @@ if __name__ == '__main__':
 #         ax.set_title(r'Converted Image')
 #         cax = fig.add_axes([ax.get_position().x1+0.005,ax.get_position().y0,0.01,ax.get_position().height])
 #         fig.colorbar(subfig, cax=cax)
-#         
+#           
 #         ax=axes.flat[2]
 # #         ax.set_aspect('equal')
 #         perm_rec=eit.img2vec(im)
@@ -366,7 +396,7 @@ if __name__ == '__main__':
 #         ax.set_title(r'Recovered')
 #         cax = fig.add_axes([ax.get_position().x1+0.01,ax.get_position().y0,0.01,ax.get_position().height])
 #         fig.colorbar(subfig, cax=cax)
-#         
+#           
 #         plt.subplots_adjust(wspace=0.4, hspace=0)
 #         plt.savefig(os.path.join('./result',str(eit.gdim)+'d_image_conversion_dim'+str(eit.dim)+'.png'),bbox_inches='tight')
     
@@ -388,7 +418,7 @@ if __name__ == '__main__':
         sub_figs[0]=eit.plot(ax=axes.flat[0])
         axes.flat[0].axis('equal')
         axes.flat[0].set_title(r'True Conductivities')
-        sub_figs[1]=eit.plot(perm=ds,ax=axes.flat[1])
+        sub_figs[1]=eit.plot(input=ds,ax=axes.flat[1])
         axes.flat[1].axis('equal')
         axes.flat[1].set_title(r'Reconstructed Conductivities (MAP)')
         from util.common_colorbar import common_colorbar
@@ -400,4 +430,4 @@ if __name__ == '__main__':
         # plt.show()
     else:
         eit.plot()
-        eit.plot(perm=ds)
+        eit.plot(input=ds)

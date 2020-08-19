@@ -12,7 +12,10 @@ import numpy.linalg as la
 from scipy import sparse
 from pyeit.eit.fem import *
 from pyeit.eit.utils import eit_scan_lines
-
+# set to warn only once for the same warnings
+from scipy.sparse import SparseEfficiencyWarning
+import warnings
+warnings.simplefilter('ignore',SparseEfficiencyWarning)
 
 class Forward(Forward):
     """ FEM forward computing code """
@@ -138,21 +141,25 @@ class Forward(Forward):
         kg = assemble_sparse(ke, self.tri, perm, self.n_pts, ref=self.ref)
 
         # 3. calculate electrode impedance matrix R = K^{-1}
-        r_matrix = la.inv(kg)
-        r_el = r_matrix[self.el_pos]
+#         r_matrix = sparse.linalg.spsolve(kg,sparse.eye(self.n_pts))#la.inv(kg)
+#         r_el = r_matrix[self.el_pos]
+        r_el = sparse.linalg.spsolve(kg,sparse.csc_matrix((np.ones(self.ne),(self.el_pos,np.arange(self.ne))),shape=(self.n_pts,self.ne))).A.T
+#         print(np.allclose(r_el,r_el1))
 
         # 4. solving nodes potential using boundary conditions
         b = super()._natural_boundary(ex_line)
-        f = np.dot(r_matrix, b).ravel()
+#         f = np.dot(r_matrix, b).ravel()
+        f = sparse.linalg.spsolve(kg, b).ravel()
 
         # 5. build Jacobian matrix column wise (element wise)
         #    Je = Re*Ke*Ve = (nex3) * (3x3) * (3x1)
         if skip_jac:
             jac = None
         else:
-            jac = np.zeros((self.ne, self.n_tri), dtype=perm.dtype)
-            for (i, e) in enumerate(self.tri):
-                jac[:, i] = np.dot(np.dot(r_el[:, e], ke[i]), f[e])
+#             jac = np.zeros((self.ne, self.n_tri), dtype=perm.dtype)
+#             for (i, e) in enumerate(self.tri):
+#                 jac[:, i] = np.dot(np.dot(r_el[:, e], ke[i]), f[e])
+            jac = np.sum(np.sum(r_el[:,self.tri,None]*ke[None,...],axis=2)*f[None,self.tri],axis=2)
 
         return f, jac
     
@@ -164,6 +171,66 @@ class Forward(Forward):
         me = assemble_sparse(me, self.tri, np.ones(self.n_tri), self.n_pts, ref=self.ref)
         
         return me
+
+def assemble_sparse(ke, tri, perm, n_pts, ref=0):
+    """
+    Assemble the stiffness matrix (using sparse matrix)
+
+    Parameters
+    ----------
+    ke: NDArray
+        n_tri x (n_dim x n_dim) 3d matrix
+    tri: NDArray
+        the structure of mesh
+    perm: NDArray
+        n_tri x 1 conductivities on elements
+    n_pts: int
+        number of nodes
+    ref: int
+        reference electrode
+
+    Returns
+    -------
+    K: NDArray
+        k_matrix, NxN array of complex stiffness matrix
+
+    Notes
+    -----
+    you may use sparse matrix (IJV) format to automatically add the local
+    stiffness matrix to the global matrix.
+    """
+    n_tri, n_vertices = tri.shape
+
+    # New: use IJV indexed sparse matrix to assemble K (fast, prefer)
+    # index = np.array([np.meshgrid(no, no, indexing='ij') for no in tri])
+    # note: meshgrid is slow, using handcraft sparse index, for example
+    # let tri=[[1, 2, 3], [4, 5, 6]], then indexing='ij' is equivalent to
+    # row = [1, 1, 1, 2, 2, 2, ...]
+    # col = [1, 2, 3, 1, 2, 3, ...]
+    row = np.repeat(tri, n_vertices).ravel()
+    col = np.repeat(tri, n_vertices, axis=0).ravel()
+    data = np.array([ke[i] * perm[i] for i in range(n_tri)]).ravel()
+
+    # set reference nodes before constructing sparse matrix, where
+    # K[ref, :] = 0, K[:, ref] = 0, K[ref, ref] = 1.
+    # write your own mask code to set the corresponding locations of data
+    # before building the sparse matrix, for example,
+    # data = mask_ref_node(data, row, col, ref)
+
+    # for efficient sparse inverse (csc)
+    A = sparse.csc_matrix((data, (row, col)),
+                          shape=(n_pts, n_pts), dtype=perm.dtype)
+
+    # the stiffness matrix may not be sparse
+#     A = A.toarray()
+
+    # place reference electrode
+    if 0 <= ref < n_pts:
+        A[ref, :] = 0.
+        A[:, ref] = 0.
+        A[ref, ref] = 1.
+
+    return A
 
 def calculate_me(pts, tri):
     """

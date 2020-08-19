@@ -43,10 +43,10 @@ meshsz = .05
 el_dist, step = 1, 1
 anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
            {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]
-lamb=1e-2
-eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=lamb)
+nz_var=1e-2; lamb=1e-1; rho=0.25
+eit=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,rho=rho)
 meshsz = 0.1
-eit_latent=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,lamb=1,obs=eit.obs)
+eit_latent=EIT(n_el=n_el,bbox=bbox,meshsz=meshsz,el_dist=el_dist,step=step,anomaly=anomaly,nz_var=nz_var,lamb=lamb,obs=eit.obs)
 
 # ##------ define networks ------##
 # # training data algorithms
@@ -135,7 +135,7 @@ if os.path.exists(os.path.join(folder,'mcmc_est.pckl')):
 else:
     # preparation for estimates
     pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
-    num_samp=2000
+    num_samp=5000
     prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
     for i in range(num_algs):
         found=False
@@ -163,7 +163,8 @@ else:
                 try:
                     f=open(os.path.join(folder,f_i),'rb')
                     f_read=pickle.load(f)
-                    samp=f_read[3]
+#                     samp=f_read[3]
+                    samp=np.abs(f_read[3])
                     for s in range(num_samp):
                         if s+1 in prog:
                             print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
