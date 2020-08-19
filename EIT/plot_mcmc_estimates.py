@@ -39,7 +39,7 @@ def chop(A,width=[1]):
 np.random.seed(2020)
 n_el = 16
 bbox = [[-1,-1],[1,1]]
-meshsz = .05
+meshsz = .04
 el_dist, step = 1, 1
 anomaly = [{'x': 0.4, 'y': 0.4, 'd': 0.2, 'perm': 10},
            {'x': -0.4, 'y': -0.4, 'd': 0.2, 'perm': 0.1}]

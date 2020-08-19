@@ -25,7 +25,7 @@ def main():
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.05,.1,.05,None,None])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.15,.3,.2,None,None])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()

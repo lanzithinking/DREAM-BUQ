@@ -188,20 +188,23 @@ class EIT:
             unknown=self.prior['cov'].dot(unknown)
         
         force_posperm=kwargs.pop('force_posperm',False)
+        if force_posperm:
+            sign_unknown=np.sign(unknown)
+            unknown=np.abs(unknown)
         if len(unknown)==self.dim:
             perm=self._pts2sim(unknown) # unknown is a vector of nodal values
         elif len(unknown)==self.fwd.n_tri:
             perm=unknown
-        if force_posperm:
-            sign_unknown=np.sign(unknown)
-            perm=np.abs(perm)
+        else:
+            raise AttributeError('Wrong size of unknown function!')
         
         if any(s>=0 for s in geom_ord):
             fs=self.solve(perm=perm,skip_jac=not any(s>0 for s in geom_ord))
             loglik = -0.5*np.sum((self.obs-fs.v)**2/self.nz_var)
         
         if any(s>=1 for s in geom_ord):
-            jacT=-self._d_pts2sim().T.dot(fs.jac.T) # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
+            jacT=-fs.jac.T # pyeit.eit.fem returns jacobian of residual: d(v-f)/dsigma = -df/dsigma
+            if len(unknown)==self.dim: jacT=self._d_pts2sim().T.dot(jacT)
             gradlik = np.dot(jacT,(self.obs-fs.v)/self.nz_var)
             if force_posperm: gradlik*=sign_unknown
 #             gradlik = self.M.dot(gradlik)
@@ -214,6 +217,7 @@ class EIT:
                 gradlik = cholC.T.dot(gradlik)
         
         if any(s>=1.5 for s in geom_ord):
+            if force_posperm: jacT=sign_unknown[:,None]*jacT
             _get_metact_misfit=lambda u_actedon: jacT.dot(jacT.T.dot(self._pts2sim(u_actedon))/self.nz_var) # GNH
             _get_rtmetact_misfit=lambda u_actedon: jacT.dot(u_actedon/sqrt(self.nz_var))
             metact = _get_metact_misfit
