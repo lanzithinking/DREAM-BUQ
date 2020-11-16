@@ -31,7 +31,7 @@ def main():
     args = parser.parse_args()
 
     ## define Advection-Diffusion inverse problem ##
-    mesh = df.Mesh('ad_20.xml')
+    mesh = df.Mesh('ad_10k.xml')
     kappa = 1e-3
     rel_noise = .5
     nref = 1

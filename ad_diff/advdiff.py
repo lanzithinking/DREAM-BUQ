@@ -17,14 +17,16 @@ import os
 sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
 from hippylib import *
 
-# sys.path.append( "../" )
+sys.path.append( "../" )
 # from util import *
+from util.dolfin_gadget import fun2img, img2fun
 from pde import *
 from prior import *
 from misfit import *
 # from posterior import *
 from whiten import *
 from randomizedEigensolver_ext import *
+
 
 class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
     def __init__(self, mesh=None, gamma = 1., delta = 8., simulation_times=None, observation_times=None, targets=None, rel_noise=0.01, **kwargs):
@@ -377,6 +379,32 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         
         return MAP[PARAMETER]
     
+    def vec2img(self,input,imsz=None):
+        """
+        Convert vector over mesh to image as a matrix
+        (2D only)
+        """
+        if imsz is None: imsz = np.floor(np.sqrt(input.size()/self.pde.Vh[STATE].ufl_element().degree()**2)).astype('int')
+        mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+        Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
+        fun2itrp = vector2Function(input, self.pde.Vh[STATE])
+        fun2itrp.set_allow_extrapolation(True)
+        fun_itrp = dl.interpolate(fun2itrp, Vh_itrp)
+        # ToDo: get the mask
+        im = fun2img(fun_itrp)
+        return im
+    
+    def img2vec(self,im):
+        """
+        Convert image matrix to vector value over mesh
+        """
+        imsz = im.shape[1]
+        mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+        Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
+        fun_itrp = img2fun(im, Vh_itrp)
+        output = dl.interpolate(fun_itrp, self.pde.Vh[STATE])
+        return output.vector()
+    
     def _check_folder(self,fld_name='result'):
         """
         Check the existence of folder for storing result and create one if not
@@ -468,10 +496,32 @@ if __name__ == '__main__':
     nref = 1
     adif = advdiff(mesh=mesh, Re=Re, rel_noise=rel_noise, nref=nref, seed=seed)
     # test
-    adif.test(1e-8)
-    # obtain MAP
-    map_v = adif.get_MAP(rand_init=True)
-    fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
-    plt.colorbar(fig)
+#     adif.test(1e-8)
+#     # obtain MAP
+#     map_v = adif.get_MAP(rand_init=True)
+#     fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
+#     plt.colorbar(fig)
+# #     plt.show()
+#     plt.savefig(os.path.join(os.getcwd(),'results/map.png'),bbox_inches='tight')
+    # conversion
+    v = adif.prior.sample()
+    im = adif.vec2img(v)
+    v1 = adif.img2vec(im)
+    fig,axes = plt.subplots(nrows=1,ncols=3,sharex=True,sharey=False,figsize=(16,5))
+    sub_figs=[None]*3
+    plt.axes(axes.flat[0])
+    sub_figs[0]=dl.plot(vector2Function(v,adif.pde.Vh[STATE]))
+    axes.flat[0].axis('equal')
+    axes.flat[0].set_title(r'Original Image')
+    plt.axes(axes.flat[1])
+    sub_figs[1]=plt.imshow(im,origin='lower',extent=[0,1,0,1])
+    axes.flat[1].axis('equal')
+    axes.flat[1].set_title(r'Transformed Image')
+    plt.axes(axes.flat[2])
+    sub_figs[2]=dl.plot(vector2Function(v1,adif.pde.Vh[STATE]))
+    axes.flat[2].axis('equal')
+    axes.flat[2].set_title(r'Reconstructed Image')
+    from util.common_colorbar import common_colorbar
+    fig=common_colorbar(fig,axes,sub_figs)
 #     plt.show()
-    plt.savefig(os.path.join(os.getcwd(),'results/map.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'results/conversion.png'),bbox_inches='tight')
