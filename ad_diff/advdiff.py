@@ -385,13 +385,20 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         (2D only)
         """
         if imsz is None: imsz = np.floor(np.sqrt(input.size()/self.pde.Vh[STATE].ufl_element().degree()**2)).astype('int')
-        mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
-        Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
+        if not hasattr(self, 'Vh_itrp'):
+            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+    #         mesh_itrp = dl.SubMesh(sqmesh, submf, 1)
+            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
         fun2itrp = vector2Function(input, self.pde.Vh[STATE])
         fun2itrp.set_allow_extrapolation(True)
-        fun_itrp = dl.interpolate(fun2itrp, Vh_itrp)
-        # ToDo: get the mask
+        fun_itrp = dl.interpolate(fun2itrp, self.Vh_itrp)
         im = fun2img(fun_itrp)
+        if not hasattr(self, 'marker'):
+            submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
+            submf.set_all(1)
+            codomain().mark(submf,0)
+            self.marker = submf.array().reshape((imsz,)*2)
+        im = im*self.marker
         return im
     
     def img2vec(self,im):
@@ -399,9 +406,10 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         Convert image matrix to vector value over mesh
         """
         imsz = im.shape[1]
-        mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
-        Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
-        fun_itrp = img2fun(im, Vh_itrp)
+        if not hasattr(self, 'Vh_itrp'):
+            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
+        fun_itrp = img2fun(im, self.Vh_itrp)
         output = dl.interpolate(fun_itrp, self.pde.Vh[STATE])
         return output.vector()
     

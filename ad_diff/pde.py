@@ -18,10 +18,23 @@ from hippylib import *
 sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 
+class codomain(dl.SubDomain):
+    def inside(self, x, on_boundary):
+        return self.sub1(x) or self.sub2(x)
+    def sub1(self, x):
+        return x[0]>=0.25 and x[0]<=0.5 and x[1]>=0.15 and x[1]<=0.4
+    def sub2(self, x):
+        return x[0]>=0.6 and x[0]<=0.75 and x[1]>=0.6 and x[1]<=0.85
+
 class TimeDependentAD:
     def __init__(self, mesh=None, simulation_times=None, gls_stab=True, **kwargs):
         # get mesh
-        self.mesh = dl.Mesh('ad_10k.xml') if mesh is None else mesh
+        if mesh is None:
+            self.mesh = dl.Mesh('ad_10k.xml')
+        elif isinstance(mesh, tuple):
+            self.mesh = self.generate_mesh(*mesh)
+        else:
+            self.mesh = mesh
         self.mpi_comm=self.mesh.mpi_comm()
         self.rank = dl.MPI.rank(self.mpi_comm)
         # set FEM
@@ -45,6 +58,14 @@ class TimeDependentAD:
         # count PDE solving times
         self.soln_count = np.zeros(4)
         # 0-3: number of solving (forward,adjoint,2ndforward,2ndadjoint) equations respectively
+    
+    def generate_mesh(self, nx=52, ny=52):
+        sqmesh = dl.UnitSquareMesh(nx=nx-1, ny=ny-1)
+        submf = dl.MeshFunction('size_t', sqmesh, sqmesh.topology().dim())
+        submf.set_all(1)
+        codomain().mark(submf,0)
+        mesh = dl.SubMesh(sqmesh, submf, 1)
+        return mesh
     
     def set_FEM(self):
         """
