@@ -22,7 +22,7 @@ np.random.seed(seed)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=2)
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.003,.003,.01,.01])
@@ -31,7 +31,8 @@ def main():
     args = parser.parse_args()
 
     ## define Advection-Diffusion inverse problem ##
-    mesh = df.Mesh('ad_10k.xml')
+#     mesh = df.Mesh('ad_10k.xml')
+    mesh = (51,51)
     kappa = 1e-3
     rel_noise = .5
     nref = 1

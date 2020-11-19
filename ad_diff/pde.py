@@ -19,12 +19,15 @@ sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 
 class codomain(dl.SubDomain):
+    def __init__(self, offset = dl.DOLFIN_EPS_LARGE, *args, **kwargs):
+        self.offset = offset
+        dl.SubDomain.__init__(self, *args, **kwargs)
     def inside(self, x, on_boundary):
         return self.sub1(x) or self.sub2(x)
     def sub1(self, x):
-        return x[0]>=0.25 and x[0]<=0.5 and x[1]>=0.15 and x[1]<=0.4
+        return x[0]>=0.25+self.offset and x[0]<=0.5-self.offset and x[1]>=0.15+self.offset and x[1]<=0.4-self.offset
     def sub2(self, x):
-        return x[0]>=0.6 and x[0]<=0.75 and x[1]>=0.6 and x[1]<=0.85
+        return x[0]>=0.6+self.offset and x[0]<=0.75-self.offset and x[1]>=0.6+self.offset and x[1]<=0.85-self.offset
 
 class TimeDependentAD:
     def __init__(self, mesh=None, simulation_times=None, gls_stab=True, **kwargs):
@@ -32,10 +35,11 @@ class TimeDependentAD:
         if mesh is None:
             self.mesh = dl.Mesh('ad_10k.xml')
         elif isinstance(mesh, tuple):
-            self.mesh = self.generate_mesh(*mesh)
+            self.meshsz = mesh
+            self.mesh = self.generate_mesh(*self.meshsz)
         else:
             self.mesh = mesh
-        self.mpi_comm=self.mesh.mpi_comm()
+        self.mpi_comm = self.mesh.mpi_comm()
         self.rank = dl.MPI.rank(self.mpi_comm)
         # set FEM
         self.set_FEM()

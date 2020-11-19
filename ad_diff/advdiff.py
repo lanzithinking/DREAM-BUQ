@@ -34,7 +34,13 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         Initialize the inverse advection-diffusion problem by defining the physical PDE model, the prior model and the misfit (likelihood) model.
         """
         # get the mesh
-        self.mesh = dl.Mesh('ad_10k.xml') if mesh is None else mesh
+        if mesh is None:
+            self.mesh = dl.Mesh('ad_10k.xml')
+        elif isinstance(mesh, tuple):
+            self.meshsz = mesh
+            self.mesh = self.generate_mesh(*self.meshsz)
+        else:
+            self.mesh = mesh
         self.mpi_comm = self.mesh.mpi_comm()
         self.rank = dl.MPI.rank(self.mpi_comm)
         self.nproc = dl.MPI.size(self.mpi_comm)
@@ -384,30 +390,38 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         Convert vector over mesh to image as a matrix
         (2D only)
         """
-        if imsz is None: imsz = np.floor(np.sqrt(input.size()/self.pde.Vh[STATE].ufl_element().degree()**2)).astype('int')
-        if not hasattr(self, 'Vh_itrp'):
-            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+        if imsz is None: imsz = self.meshsz if hasattr(self,'meshsz') else (np.floor(np.sqrt(input.size()/self.pde.Vh[STATE].ufl_element().degree()**2)).astype('int'),)*2
+        if not all(hasattr(self, att) for att in ['Vh_itrp','marker']):
+            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz[0]-1, ny=imsz[1]-1)
     #         mesh_itrp = dl.SubMesh(sqmesh, submf, 1)
             self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
-        fun2itrp = vector2Function(input, self.pde.Vh[STATE])
-        fun2itrp.set_allow_extrapolation(True)
-        fun_itrp = dl.interpolate(fun2itrp, self.Vh_itrp)
-        im = fun2img(fun_itrp)
-        if not hasattr(self, 'marker'):
             submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
             submf.set_all(1)
-            codomain().mark(submf,0)
-            self.marker = submf.array().reshape((imsz,)*2)
-        im = im*self.marker
+            codomain(offset=1.1/(imsz[0]-1)).mark(submf,0)
+            self.marker = submf.array().reshape(imsz)
+        fun2itrp = vector2Function(input, self.pde.Vh[STATE])
+#         # test marker
+#         dl.plot(self.mesh)
+#         def_coord=mesh_itrp.coordinates()[self.marker.flatten()==1,:]
+#         plt.scatter(def_coord[:,0], def_coord[:,1], c='red')
+#         if hasattr(self,'meshsz') and self.pde.Vh[STATE].ufl_element().degree()==1:
+#             im = np.zeros(np.prod(imsz))
+#             im[self.marker==1] = fun2itrp.compute_vertex_values(self.mesh) # bug: some mis-alignment due to different meshes
+# #             v2d = dl.vertex_to_dof_map(self.pde.Vh[STATE])
+# #             im[self.marker==1] = input.get_local()[v2d]
+#         else:
+        fun2itrp.set_allow_extrapolation(True)
+        fun_itrp = dl.interpolate(fun2itrp, self.Vh_itrp)
+        im = fun2img(fun_itrp)*self.marker
         return im
     
     def img2vec(self,im):
         """
         Convert image matrix to vector value over mesh
         """
-        imsz = im.shape[1]
+        imsz = im.shape
         if not hasattr(self, 'Vh_itrp'):
-            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz-1, ny=imsz-1)
+            mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz[0]-1, ny=imsz[1]-1)
             self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
         fun_itrp = img2fun(im, self.Vh_itrp)
         output = dl.interpolate(fun_itrp, self.pde.Vh[STATE])
@@ -498,10 +512,11 @@ if __name__ == '__main__':
     seed=2020
     np.random.seed(seed)
     # define Bayesian inverse problem
-    mesh = dl.Mesh('ad_10k.xml')
+#     mesh = dl.Mesh('ad_10k.xml')
+    mesh = (51,51)
     Re = 100.
     rel_noise = .1
-    nref = 1
+    nref = 0
     adif = advdiff(mesh=mesh, Re=Re, rel_noise=rel_noise, nref=nref, seed=seed)
     # test
 #     adif.test(1e-8)
