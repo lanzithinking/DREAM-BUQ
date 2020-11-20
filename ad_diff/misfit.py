@@ -194,5 +194,5 @@ if __name__ == '__main__':
     plt_times=[1.,2.,3.,4.]
     fig = misfit.plot_data(plt_times, (10,9))
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    plt.savefig(os.path.join(os.getcwd(),'results/obs.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'result/obs.png'),bbox_inches='tight')
     
