@@ -8,7 +8,7 @@ import numpy as np
 
 import os, pickle
 
-TRAIN={0:'XimgY',1:'XY'}[1]
+TRAIN={0:'XimgY',1:'XY'}[0]
 whiten=False
 
 def retrieve_ensemble(bip,dir_name,f_name,ensbl_sz,max_iter,img_out=False,whiten=False):
@@ -17,9 +17,9 @@ def retrieve_ensemble(bip,dir_name,f_name,ensbl_sz,max_iter,img_out=False,whiten
     num_ensbls=max_iter*ensbl_sz
     if img_out:
         gdim = bip.prior.V.mesh().geometry().dim()
-        imsz = np.floor((bip.prior.V.dim()/bip.prior.V.ufl_element().degree()**2)**(1./gdim)).astype('int')
+        imsz = bip.meshsz if hasattr(bip,'meshsz') else (np.floor((bip.prior.V.dim()/bip.prior.V.ufl_element().degree()**2)**(1./gdim)).astype('int'),)*gdim
 #         out_shape=(num_ensbls,np.int((bip.prior.V.dim()/bip.prior.V.ufl_element().degree()**2)/imsz**(gdim-1)))+(imsz,)*(gdim-1)
-        out_shape=(num_ensbls,)+(imsz,)*gdim
+        out_shape=(num_ensbls,)+imsz
     else:
         out_shape=(num_ensbls,bip.mesh.num_vertices())
     out=np.zeros(out_shape)
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     max_iter=10
     img_out=('img' in TRAIN)
     
-    PLOT=True
+    PLOT=False
     SAVE=True
     # prepare data
     for a in range(num_algs):
@@ -72,7 +72,8 @@ if __name__ == '__main__':
                     out=retrieve_ensemble(adif,folder,f_i,ensbl_sz,max_iter,img_out,whiten)
                     print(f_i+' has been read!')
                     found=True; break
-                except:
+                except Exception as e:
+                    print(e)
                     pass
         if found and img_out and PLOT:
             import matplotlib.pyplot as plt
@@ -103,6 +104,7 @@ if __name__ == '__main__':
                         pass
         if found and SAVE:
             savepath='./train_NN/'
+            if not os.path.exists(savepath): os.makedirs(savepath)
             ifwhiten='_whitened' if whiten else ''
             if 'Y' in TRAIN:
                 np.savez_compressed(file=os.path.join(savepath,algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+ifwhiten),X=out,Y=fwdout)
