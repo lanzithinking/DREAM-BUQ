@@ -396,12 +396,12 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
     #         mesh_itrp = dl.SubMesh(sqmesh, submf, 1)
             self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
             if hasattr(self,'meshsz'):
-                self.marker = check_in_mesh(self.pde.Vh[STATE].tabulate_dof_coordinates() if self.pde.Vh[STATE].ufl_element().degree()==1 else self.mesh.coordinates(),mesh_itrp)[0]
+                self.marker = check_in_mesh(self.pde.Vh[STATE].tabulate_dof_coordinates() if self.pde.Vh[STATE].ufl_element().degree()==1 else self.mesh.coordinates(),mesh_itrp)[0] # index in mesh
             else:
                 submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
                 submf.set_all(1)
                 codomain(offset=1.1/(imsz[0]-1)).mark(submf,0)
-                self.marker = submf.array()#.reshape(imsz)
+                self.marker = submf.array()#.reshape(imsz)  # boolean masking
         fun2itrp = vector2Function(input, self.pde.Vh[STATE])
 #         # test marker
 #         dl.plot(self.mesh)
