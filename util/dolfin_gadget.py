@@ -58,6 +58,20 @@ def check_in_dof(points,V,tol=2*df.DOLFIN_EPS):
     loc_in_dof = points[rel_idx_in,]
     return idx_in_dof,loc_in_dof,rel_idx_in
 
+def check_in_mesh(points,mesh,tol=2*df.DOLFIN_EPS):
+    """
+    Check whether points are on a given mesh and output those mesh indices
+    """
+    # obtain mesh coordinates
+    msh_coords=mesh.coordinates()
+    # check whether those points are close to vertices of the mesh
+    pdist_pts2mshs = np.einsum('ijk->ij',(points[:,None,:]-msh_coords[None,:,:])**2)
+    idx_in_msh = np.argmin(pdist_pts2mshs,axis=1)
+    rel_idx_in = np.where(np.einsum('ii->i',pdist_pts2mshs[:,idx_in_msh])<tol**2)[0] # index relative to points
+    idx_in_msh = idx_in_msh[rel_idx_in]
+    loc_in_msh = points[rel_idx_in,]
+    return idx_in_msh,loc_in_msh,rel_idx_in
+
 def vec2fun(vec,V):
     """
     Convert a vector to a dolfin function such that the function has the vector as coefficients.

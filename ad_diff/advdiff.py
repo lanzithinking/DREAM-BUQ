@@ -19,7 +19,7 @@ from hippylib import *
 
 sys.path.append( "../" )
 # from util import *
-from util.dolfin_gadget import fun2img, img2fun
+from util.dolfin_gadget import *#fun2img, img2fun
 from pde import *
 from prior import *
 from misfit import *
@@ -395,24 +395,30 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
             mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz[0]-1, ny=imsz[1]-1)
     #         mesh_itrp = dl.SubMesh(sqmesh, submf, 1)
             self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
-            submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
-            submf.set_all(1)
-            codomain(offset=1.1/(imsz[0]-1)).mark(submf,0)
-            self.marker = submf.array().reshape(imsz)
+            if hasattr(self,'meshsz'):
+                self.marker = check_in_mesh(self.pde.Vh[STATE].tabulate_dof_coordinates() if self.pde.Vh[STATE].ufl_element().degree()==1 else self.mesh.coordinates(),mesh_itrp)[0]
+            else:
+                submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
+                submf.set_all(1)
+                codomain(offset=1.1/(imsz[0]-1)).mark(submf,0)
+                self.marker = submf.array()#.reshape(imsz)
         fun2itrp = vector2Function(input, self.pde.Vh[STATE])
 #         # test marker
 #         dl.plot(self.mesh)
-#         def_coord=mesh_itrp.coordinates()[self.marker.flatten()==1,:]
-#         plt.scatter(def_coord[:,0], def_coord[:,1], c='red')
-#         if hasattr(self,'meshsz') and self.pde.Vh[STATE].ufl_element().degree()==1:
-#             im = np.zeros(np.prod(imsz))
+#         mesh_coord=mesh_itrp.coordinates()[self.marker.flatten()==1,:]
+#         plt.scatter(mesh_coord[:,0], mesh_coord[:,1], c='red')
+        if hasattr(self,'meshsz'):# and self.pde.Vh[STATE].ufl_element().degree()==1:
+            im = np.zeros(np.prod(imsz))
 #             im[self.marker==1] = fun2itrp.compute_vertex_values(self.mesh) # bug: some mis-alignment due to different meshes
-# #             v2d = dl.vertex_to_dof_map(self.pde.Vh[STATE])
-# #             im[self.marker==1] = input.get_local()[v2d]
-#         else:
-        fun2itrp.set_allow_extrapolation(True)
-        fun_itrp = dl.interpolate(fun2itrp, self.Vh_itrp)
-        im = fun2img(fun_itrp)*self.marker
+#             v2d = dl.vertex_to_dof_map(self.pde.Vh[STATE]) # only works for P1 space
+#             im[self.marker==1] = input.get_local()[v2d] # same bug
+            im[self.marker] = input.get_local() if self.pde.Vh[STATE].ufl_element().degree()==1 else fun2itrp.compute_vertex_values(self.mesh)
+            im = im.reshape(imsz)
+#             plt.imshow(im,origin='lower',extent=[0,1,0,1])
+        else:
+            fun2itrp.set_allow_extrapolation(True)
+            fun_itrp = dl.interpolate(fun2itrp, self.Vh_itrp)
+            im = fun2img(fun_itrp)*self.marker
         return im
     
     def img2vec(self,im):
