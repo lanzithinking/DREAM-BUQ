@@ -152,8 +152,11 @@ if __name__=='__main__':
     from pde import *
     np.random.seed(2020)
     # obtain function space
-    mesh = dl.Mesh('ad_10k.xml')
-    Vh = dl.FunctionSpace(mesh, "Lagrange", 2)
+#     mesh = dl.Mesh('ad_10k.xml')
+#     Vh = dl.FunctionSpace(mesh, "Lagrange", 2)
+    mesh = (51,51)
+    pde = TimeDependentAD(mesh)
+    Vh = pde.Vh[STATE]
     # define prior
     prior = BiLaplacian(Vh)
     

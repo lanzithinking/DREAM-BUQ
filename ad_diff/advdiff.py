@@ -394,13 +394,13 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         if not all(hasattr(self, att) for att in ['Vh_itrp','marker']):
             mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz[0]-1, ny=imsz[1]-1)
     #         mesh_itrp = dl.SubMesh(sqmesh, submf, 1)
-            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
+            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1) # whole space to be interpolated on
             if hasattr(self,'meshsz'):
                 self.marker = check_in_mesh(self.pde.Vh[STATE].tabulate_dof_coordinates() if self.pde.Vh[STATE].ufl_element().degree()==1 else self.mesh.coordinates(),mesh_itrp)[0] # index in mesh
             else:
                 submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
                 submf.set_all(1)
-                codomain(offset=1.1/(imsz[0]-1)).mark(submf,0)
+                codomain(offset=1./(imsz[0]-1)).mark(submf,0)
                 self.marker = submf.array()#.reshape(imsz)  # boolean masking
         fun2itrp = vector2Function(input, self.pde.Vh[STATE])
 #         # test marker
@@ -421,17 +421,33 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
             im = fun2img(fun_itrp)*self.marker
         return im
     
-    def img2vec(self,im):
+    def img2vec(self,im,V=None):
         """
         Convert image matrix to vector value over mesh
         """
         imsz = im.shape
-        if not hasattr(self, 'Vh_itrp'):
+        if not all(hasattr(self, att) for att in ['Vh_itrp','marker']):
             mesh_itrp = dl.UnitSquareMesh(self.mpi_comm, nx=imsz[0]-1, ny=imsz[1]-1)
-            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1)
-        fun_itrp = img2fun(im, self.Vh_itrp)
-        output = dl.interpolate(fun_itrp, self.pde.Vh[STATE])
-        return output.vector()
+            self.Vh_itrp = dl.FunctionSpace(mesh_itrp, "Lagrange", 1) # whole space to be interpolated on
+            if hasattr(self,'meshsz'):
+                self.marker = check_in_mesh(self.pde.Vh[STATE].tabulate_dof_coordinates() if self.pde.Vh[STATE].ufl_element().degree()==1 else self.mesh.coordinates(),mesh_itrp)[0] # index in mesh
+            else:
+                submf = dl.MeshFunction('size_t', mesh_itrp, 0) # 0: vertex function
+                submf.set_all(1)
+                codomain(offset=1./(imsz[0]-1)).mark(submf,0)
+                self.marker = submf.array()  # boolean masking
+#         fun_itrp = img2fun(im, self.Vh_itrp)
+        if hasattr(self,'meshsz') and V is None:
+            Vh_P1 = dl.FunctionSpace(self.mesh,'Lagrange',1)
+            f = dl.Function(Vh_P1)
+            d2v = dl.dof_to_vertex_map(Vh_P1)
+            f.vector().set_local(im.flatten()[self.marker][d2v])
+#             dl.plot(f)
+            vec = f.vector()
+        else:
+            fun_itrp = img2fun(im, self.Vh_itrp)
+            vec = dl.interpolate(fun_itrp, self.pde.Vh[STATE] if V is None else V).vector()
+        return vec
     
     def _check_folder(self,fld_name='result'):
         """
@@ -520,14 +536,14 @@ if __name__ == '__main__':
     # define Bayesian inverse problem
 #     mesh = dl.Mesh('ad_10k.xml')
     mesh = (51,51)
-    Re = 100.
-    rel_noise = .1
-    nref = 0
-    adif = advdiff(mesh=mesh, Re=Re, rel_noise=rel_noise, nref=nref, seed=seed)
-    # test
+    kappa = 1e-3
+    rel_noise = .5
+    nref = 1
+    adif = advdiff(mesh=mesh, kappa=kappa, rel_noise=rel_noise, nref=nref, seed=seed)
+#     # test
 #     adif.test(1e-8)
 #     # obtain MAP
-#     map_v = adif.get_MAP(rand_init=True)
+#     map_v = adif.get_MAP(rand_init=False)
 #     fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
 #     plt.colorbar(fig)
 # #     plt.show()
@@ -547,7 +563,8 @@ if __name__ == '__main__':
     axes.flat[1].axis('equal')
     axes.flat[1].set_title(r'Transformed Image')
     plt.axes(axes.flat[2])
-    sub_figs[2]=dl.plot(vector2Function(v1,adif.pde.Vh[STATE]))
+#     sub_figs[2]=dl.plot(vector2Function(v1,adif.pde.Vh[STATE]))
+    sub_figs[2]=dl.plot(vector2Function(v1,dl.FunctionSpace(adif.mesh,'Lagrange',1)))
     axes.flat[2].axis('equal')
     axes.flat[2].set_title(r'Reconstructed Image')
     from util.common_colorbar import common_colorbar

@@ -156,8 +156,10 @@ def img2fun(im,V):
             f.vector().set_local(im.flatten()[d2v])
         elif V.ufl_element().degree()>1:
             V_deg1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
-            im_f = df.Function(V_deg1)
-            im_f.vector().set_local(im.flatten())
+#             d2v = df.dof_to_vertex_map(V_deg1)
+#             im_f = df.Function(V_deg1)
+#             im_f.vector().set_local(im.flatten()[d2v])
+            im_f = img2fun(im, V_deg1)
             f.interpolate(im_f)
     else:
         raise AttributeError('Not supported!')

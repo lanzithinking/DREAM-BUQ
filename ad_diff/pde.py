@@ -19,7 +19,7 @@ sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 
 class codomain(dl.SubDomain):
-    def __init__(self, offset = dl.DOLFIN_EPS_LARGE, *args, **kwargs):
+    def __init__(self, offset = 0, *args, **kwargs):
         self.offset = offset
         dl.SubDomain.__init__(self, *args, **kwargs)
     def inside(self, x, on_boundary):
@@ -287,7 +287,8 @@ class TimeDependentAD:
 if __name__ == '__main__':
     np.random.seed(2020)
     # get mesh
-    mesh = dl.Mesh('ad_10k.xml')
+#     mesh = dl.Mesh('ad_10k.xml')
+    mesh = (51,51)
 #     from mshr import Rectangle, generate_mesh
 #     domain = Rectangle(dl.Point(0,0),dl.Point(1,1)) - Rectangle(dl.Point(.25,.15),dl.Point(.5,.4)) - Rectangle(dl.Point(.6,.6),dl.Point(.75,.85))
 #     mesh = generate_mesh(domain, 20)
@@ -300,7 +301,7 @@ if __name__ == '__main__':
     observation_dt = .2
     simulation_times = np.arange(t_init, t_final+.5*dt, dt)
     # define PDE
-    kappa = 5e-3
+    kappa = 1e-3
     ad_diff = TimeDependentAD(mesh, simulation_times, kappa=kappa)
     # plot mesh
 #     dl.plot(mesh)

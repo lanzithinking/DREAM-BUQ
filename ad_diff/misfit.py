@@ -160,7 +160,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
         for i in range(n):
             plt.axes(axes.flat[i])
             dl.plot(self.Vh.mesh())
-            sub_figs[i]=plt.scatter(self.targets[:,0],self.targets[:,1], c=self.d.data[np.where(np.isclose(self.d.times,times[i]))[0][0]])
+            sub_figs[i]=plt.scatter(self.targets[:,0],self.targets[:,1], c=self.d.data[np.where(np.isclose(self.d.times,times[i]))[0][0]], zorder=2)
+#             plt.xlim(0,1); plt.ylim(0,1)
+#             plt.gca().set_aspect('equal', 'box')
             plt.title('Time: {:.1f} s'.format(times[i],))
         fig=common_colorbar(fig,axes,sub_figs)
         return fig
@@ -168,10 +170,12 @@ class SpaceTimePointwiseStateObservation(Misfit):
 if __name__ == '__main__':
     np.random.seed(2020)
 #     # define pde
-#     pde = TimeDependentAD()
+    mesh = (51,51)
+    pde = TimeDependentAD(mesh)
+    Vh = pde.Vh[STATE]
     # obtain function space
-    mesh = dl.Mesh('ad_10k.xml')
-    Vh = dl.FunctionSpace(mesh, "Lagrange", 2)
+#     mesh = dl.Mesh('ad_10k.xml')
+#     Vh = dl.FunctionSpace(mesh, "Lagrange", 2)
     # set observation times
     t_init         = 0.
     t_final        = 4.
@@ -182,8 +186,9 @@ if __name__ == '__main__':
     # set observation locations
     targets = np.loadtxt('targets.txt')
     # define misfit
+    rel_noise = .5
     nref = 1
-    misfit = SpaceTimePointwiseStateObservation(Vh, observation_times, targets, nref=nref)
+    misfit = SpaceTimePointwiseStateObservation(Vh, observation_times, targets, rel_noise=rel_noise, nref=nref)
 #     # optional: refine mesh to obtain (new) observations
 #     rf_mesh = dl.refine(pde.mesh)
 #     rf_pde = TimeDependentAD(mesh=rf_mesh)
@@ -194,5 +199,5 @@ if __name__ == '__main__':
     plt_times=[1.,2.,3.,4.]
     fig = misfit.plot_data(plt_times, (10,9))
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    plt.savefig(os.path.join(os.getcwd(),'result/obs.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'results/obs.png'),bbox_inches='tight')
     
