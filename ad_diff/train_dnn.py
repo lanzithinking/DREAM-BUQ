@@ -8,7 +8,7 @@ import tensorflow as tf
 import sys,os,pickle
 sys.path.append( '../' )
 from advdiff import advdiff
-from util.dolfin_gadget import img2fun
+# from util.dolfin_gadget import img2fun
 from nn.dnn import DNN
 from tensorflow.keras.models import load_model
 
@@ -53,12 +53,12 @@ x_train,x_test=X[tr_idx],X[te_idx]
 y_train,y_test=Y[tr_idx],Y[te_idx]
 
 # define DNN
-depth=4
-# node_sizes=[adif.prior.V.dim(),4096,2048,1024,adif.targets.shape[0]*len(adif.observation_times)]
-# activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'output':'linear'}
+depth=5
+# node_sizes=[adif.mesh.num_vertices(),4096,2048,1024,adif.targets.shape[0]*len(adif.observation_times)]
+activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'output':'linear'}
 # activations={'hidden':tf.math.sin,'output':'linear'}
-activations={'hidden':'softplus','output':'linear'}
-droprate=0.4
+# activations={'hidden':'relu','output':'linear'}
+droprate=0.25
 # sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 # kernel_initializers={'hidden':'he_uniform','output':'he_uniform'}
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
@@ -83,7 +83,7 @@ except Exception as err:
     print(err)
     print('Train DNN...\n')
     epochs=200
-    patience=0
+    patience=5
     import timeit
     t_start=timeit.default_timer()
     dnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)

@@ -1,15 +1,16 @@
 """
-This is to test CNN in emulating (extracted) gradients compared with those exactly calculated.
+This is to test GP in emulating (extracted) gradients compared with those exactly calculated.
 """
 
 import numpy as np
 import dolfin as df
 import tensorflow as tf
+import gpflow as gpf
 import sys,os,pickle
 sys.path.append( '../' )
 from advdiff import advdiff
-from nn.cnn import CNN
-from tensorflow.keras.models import load_model
+sys.path.append( '../gp')
+from multiGP import multiGP as GP
 
 # tf.compat.v1.disable_eager_execution() # needed to train with custom loss # comment to plot
 # set random seed
@@ -31,79 +32,74 @@ algs=['EKI','EKS']
 num_algs=len(algs)
 alg_no=1
 
-# define the emulator (DNN)
+# define the emulator (GP)
 # load data
 ensbl_sz = 500
+n_train = 1000
 folder = './train_NN'
-loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
 X=loaded['X']
 Y=loaded['Y']
 # pre-processing: scale X to 0-1
 # X-=np.nanmin(X,axis=(1,2),keepdims=True) # try axis=(1,2,3)
 # X/=np.nanmax(X,axis=(1,2),keepdims=True)
-X=X[:,:,:,None]
 # split train/test
 num_samp=X.shape[0]
-# n_tr=np.int(num_samp*.75)
-# x_train,y_train=X[:n_tr],Y[:n_tr]
-# x_test,y_test=X[n_tr:],Y[n_tr:]
-tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
-te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+prng=np.random.RandomState(2020)
+sel4train = prng.choice(num_samp,size=n_train,replace=False)
+tr_idx=np.random.choice(sel4train,size=np.floor(.75*n_train).astype('int'),replace=False)
+te_idx=np.setdiff1d(sel4train,tr_idx)
 x_train,x_test=X[tr_idx],X[te_idx]
 y_train,y_test=Y[tr_idx],Y[te_idx]
 
-# define CNN
-num_filters=[16,8,8] # best for non-whiten [16,8,8]
-activations={'conv':'softplus','latent':'softmax','output':'linear'} # best for non-whiten
-# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
-# activations={'conv':'relu','latent':tf.math.sin,'output':tf.keras.layers.PReLU()}
-latent_dim=1024 # best for non-whiten 256
-droprate=0.25 # best for non-whiten .5
-sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-kernel_initializers={'conv':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-# optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
-        activations=activations, optimizer=optimizer)
+# define GP
+latent_dim=y_train.shape[1]
+kernel=gpf.kernels.SquaredExponential() + gpf.kernels.Linear()
+# kernel=gpf.kernels.SquaredExponential(lengthscales=np.random.rand(x_train.shape[1])) + gpf.kernels.Linear()
+# kernel=gpf.kernels.Matern32()
+# kernel=gpf.kernels.Matern52(lengthscales=np.random.rand(x_train.shape[1]))
+gp=GP(x_train.shape[1], y_train.shape[1], latent_dim=latent_dim,
+      kernel=kernel)
 loglik = lambda y: -0.5*tf.math.reduce_sum((y-adif.misfit.obs)**2/adif.misfit.noise_variance,axis=1)
-# custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), (y_true-y_pred)/adif.misfit.noise_variance]
-# dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
-#         activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer, loss=custom_loss)
-folder='./train_NN/CNN/saved_model'
+folder='./train_NN/GP/saved_model'
 if not os.path.exists(folder): os.makedirs(folder)
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime
+f_name='gp_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime
 try:
-#     cnn.model=load_model(os.path.join(folder,f_name+'.h5'))
-#     cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
-    cnn.model.load_weights(os.path.join(folder,f_name+'.h5'))
+    gp.model=tf.saved_model.load(os.path.join(folder,f_name))
+    gp.evaluate=lambda x:gp.model.predict(x)[0] # cannot take gradient!
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
-    print('Train CNN...\n')
-    epochs=200
-    patience=0
+    print('Train GP model...\n')
+#     gp.induce_num=np.min((np.ceil(.1*x_train.shape[1]).astype('int'),ensbl_sz))
+    epochs=100
+    batch_size=128
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
+    kwargs={'maxiter':epochs}
+#     kwargs={'epochs':epochs,'batch_size':batch_size,'optimizer':optimizer}
     import timeit
     t_start=timeit.default_timer()
-    cnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
+    gp.train(x_train,y_train,x_test=x_test,y_test=y_test,**kwargs)
     t_used=timeit.default_timer()-t_start
-    print('\nTime used for training CNN: {}'.format(t_used))
-    # save cNN
-#     cnn.model.save(os.path.join(folder,f_name+'.h5'))
-#     cnn.save(folder,f_name)
-    cnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
+    print('\nTime used for training GP: {}'.format(t_used))
+    # save GP
+    save_dir=folder+'/'+f_name
+    if not os.path.exists(save_dir): os.makedirs(save_dir)
+    gp.save(save_dir)
 
 # select some gradients to evaluate and compare
-logLik = lambda x: loglik(cnn.model(x))
+logLik = lambda x: loglik(gp.evaluate(x))
 import timeit
 t_used = np.zeros(2)
 import matplotlib.pyplot as plt
 fig,axes = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True, figsize=(12,6), facecolor='white')
 plt.ion()
+# plt.show(block=True)
 n_dif = 100
 dif = np.zeros((n_dif,2))
-loaded=np.load(file=os.path.join('./train_NN',algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY'+'.npz'))
+loaded=np.load(file=os.path.join('./train_NN',algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
 prng=np.random.RandomState(2020)
 sel4eval = prng.choice(num_samp,size=n_dif,replace=False)
 X=loaded['X'][sel4eval]; Y=loaded['Y'][sel4eval]
@@ -121,12 +117,17 @@ for n in range(n_dif):
     u=X[n]
     # calculate gradient
     t_start=timeit.default_timer()
-    ll_xact,dll_xact = adif.get_geom(adif.img2vec(u,adif.prior.V if eldeg>1 else None),[0,1])[:2]
+    u_f1.vector().set_local(u); u_v = u_f1.vector() # u already in dof order
+    if eldeg>1:
+        u_f.interpolate(u_f1)
+        u_v = u_f.vector()
+#     u_f = img2fun(u, adif.prior.V); u_v = u_f.vector() # for u in vertex order
+    ll_xact,dll_xact = eit.get_geom(u,[0,1])[:2]
     t_used[0] += timeit.default_timer()-t_start
     # emulate gradient
     t_start=timeit.default_timer()
-    ll_emul = logLik(u[None,:,:,None]).numpy()[0]
-    dll_emul = adif.img2vec(cnn.gradient(u[None,:,:,None], logLik))
+    ll_emul = logLik(u[None,:]).numpy()
+    dll_emul = gp.gradient(u[None,:], logLik)
     t_used[1] += timeit.default_timer()-t_start
     # test difference
     dif_fun = np.abs(ll_xact - ll_emul)
@@ -174,18 +175,17 @@ for n in range(n_dif):
 print('Time used to calculate vs emulate gradients: {} vs {}'.format(*t_used.tolist()))
 # save to file
 import pandas as pd
-folder='./train_NN/CNN/summary'
+folder='./train_NN/GP/summary'
 if not os.path.exists(folder): os.makedirs(folder)
 file=os.path.join(folder,'dif-'+ctime+'.txt')
 np.savetxt(file,dif)
-flt_str=np.array2string(np.array(num_filters),separator=',').replace('[','').replace(']','')
-act_str=','.join([val.__name__ if type(val).__name__=='function' else val.name if callable(val) else val for val in activations.values()])
+ker_str='+'.join([ker.name for ker in kernel.kernels]) if kernel.name=='sum' else kernel.name
 dif_fun_sumry=[dif[:,0].min(),np.median(dif[:,0]),dif[:,0].max()]
 dif_fun_str=np.array2string(np.array(dif_fun_sumry),precision=2,separator=',').replace('[','').replace(']','') # formatter={'float': '{: 0.2e}'.format}
 dif_grad_sumry=[dif[:,1].min(),np.median(dif[:,1]),dif[:,1].max()]
 dif_grad_str=np.array2string(np.array(dif_grad_sumry),precision=2,separator=',').replace('[','').replace(']','')
-sumry_header=('Time','num_filters','activations','latent_dim','droprate','dif_fun (min,med,max)','dif_grad (min,med,max)')
-sumry_np=np.array([ctime,flt_str,act_str,latent_dim,droprate,dif_fun_str,dif_grad_str])
+sumry_header=('Time','train_size','latent_dim','kernel','dif_fun (min,med,max)','dif_grad (min,med,max)')
+sumry_np=np.array([ctime,n_train,latent_dim,ker_str,dif_fun_str,dif_grad_str])
 file=os.path.join(folder,'dif_sumry.txt')
 if not os.path.isfile(file):
     np.savetxt(file,sumry_np[None,:],fmt="%s",delimiter='\t|',header='\t|'.join(sumry_header))
@@ -211,11 +211,12 @@ if os.path.isfile(MAP_file):
 else:
     u=adif.get_MAP(SAVE=True)
 # calculate gradient
-dll_xact = adif.get_geom(u,[0,1])[1]
+dll_xact = eit.get_geom(u,[0,1])[1]
 # emulate gradient
-dll_emul = adif.img2vec(cnn.gradient(adif.vec2img(u)[None,:,:,None], logLik))
+dll_emul = gp.gradient(u_f.compute_vertex_values(adif.mesh)[d2v][None,:] if eldeg>1 else u.get_local()[None,:], logLik)
 
 # plot
+import matplotlib.pyplot as plt
 plt.rcParams['image.cmap'] = 'jet'
 fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
 sub_figs=[None]*2
