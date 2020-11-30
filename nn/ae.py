@@ -10,7 +10,7 @@ Created June 4, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.7"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
@@ -185,6 +185,19 @@ class AutoEncoder:
         except:
             jac = g.jacobian(y,x,experimental_use_pfor=False).numpy() # use this for some problematic activations e.g. LeakyReLU
         return np.squeeze(jac)
+    
+    def jacvec(self, input, v):
+        """
+        Obtain Jacobian-vector product for given vector v
+        """
+        if not tf.is_tensor(v): v=tf.convert_to_tensor(v, dtype=tf.float32)
+        model = getattr(self,{self.dim:'decoder',self.latent_dim:'encoder'}[v.shape[1]])
+        x = tf.Variable(input, trainable=True, dtype=tf.float32)
+        with tf.GradientTape(persistent=True) as g:
+            g.watch(x)
+            obj = tf.reduce_sum(model(x)*v)
+        jv = g.gradient(obj,x).numpy()
+        return np.squeeze(jv)
     
     def logvol(self, input, coding='encode'):
         """

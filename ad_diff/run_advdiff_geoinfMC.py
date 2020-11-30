@@ -25,18 +25,17 @@ def main():
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.003,.003,.01,.01])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.003,.003,None,None])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
 
     ## define Advection-Diffusion inverse problem ##
 #     mesh = df.Mesh('ad_10k.xml')
-    mesh = (51,51)
-    kappa = 1e-3
+    meshsz = (51,51)
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=mesh, kappa=kappa, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     
     # initialization
@@ -68,7 +67,7 @@ def main():
     f=open(filename,'ab')
 #     soln_count=[adif.soln_count,adif.pde.soln_count]
     soln_count=adif.pde.soln_count
-    pickle.dump([soln_count,args],f)
+    pickle.dump([meshsz,rel_noise,nref,soln_count,args],f)
     f.close()
 #     # verify with load
 #     f=open(filename,'rb')

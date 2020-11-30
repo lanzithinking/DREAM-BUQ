@@ -32,11 +32,10 @@ def main():
 
     ## define Advection-Diffusion inverse problem ##
 #     mesh = df.Mesh('ad_10k.xml')
-    mesh = (51,51)
-    kappa = 1e-3
+    meshsz = (51,51)
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=mesh, kappa=kappa, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     
     # initialization
@@ -67,7 +66,7 @@ def main():
     f=open(filename,'ab')
 #     soln_count=[adif.soln_count,adif.pde.soln_count]
     soln_count=adif.pde.soln_count
-    pickle.dump([soln_count,args],f)
+    pickle.dump([meshsz,rel_noise,nref,soln_count,args],f)
     f.close()
 #     # verify with load
 #     f=open(filename,'rb')

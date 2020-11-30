@@ -54,11 +54,18 @@ class BiLaplacian(SqrtPrecisionPDE_Prior):
             print( "Prior regularization: (delta - gamma*Laplacian)^order: delta={0}, gamma={1}, order={2}".format(self.delta, self.gamma,2) )
     
     def gen_vector(self, v=None):
-        if v is not None:
-            vec = dl.Vector(v)
-        else:
+        if v is None:
             vec = dl.Vector(self.mpi_comm)
             self.init_vector(vec, 0)
+        else:
+            if isinstance(v, dl.Vector):
+                vec = dl.Vector(v)
+            elif isinstance(v, np.ndarray):
+                vec = self.gen_vector()
+                vec.set_local(v)
+            else:
+                df.warning('Unknown type.')
+                vec=None
         return vec
     
     def cost(self, x):

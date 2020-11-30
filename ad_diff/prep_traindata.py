@@ -48,11 +48,10 @@ if __name__ == '__main__':
     seed=2020
     np.random.seed(seed)
 #     mesh = df.Mesh('ad_10k.xml')
-    mesh = (51,51)
-    kappa = 1e-3
+    meshsz = (51,51)
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=mesh, kappa=kappa, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     # algorithms
     algs=['EKI','EKS']
