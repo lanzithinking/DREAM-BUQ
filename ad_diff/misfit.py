@@ -1,9 +1,18 @@
 '''
-Misfit of advection-diffusion problem
+Misfit of the Advection-Diffusion problem written in FEniCS-2019.1.0 and hIPPYlib-3.0
+https://hippylib.github.io/tutorials_v3.0.0/4_AdvectionDiffusionBayesian/
+-------------------------------------------------------------------------
+Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
+Shiwei Lan @ ASU, Sept. 2020
+--------------------------------------------------------------------------
 Created on Sep 23, 2020
-
-@author: shiweilan
 '''
+__author__ = "Shiwei Lan"
+__copyright__ = "Copyright 2020, The Bayesian STIP project"
+__license__ = "GPL"
+__version__ = "0.1"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import dolfin as dl
 import ufl
@@ -20,7 +29,13 @@ sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 
 class SpaceTimePointwiseStateObservation(Misfit):
+    """
+    Misfit (negative loglikelihood) of Advection-Diffusion inverse problem
+    """
     def __init__(self, Vh, observation_times=None, targets=None, rel_noise = 0.01, d = None, **kwargs):
+        """
+        Initialize the misfit
+        """
         # function space
         self.Vh = Vh
         self.mpi_comm = self.Vh.mesh().mpi_comm()
@@ -49,6 +64,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.d.axpy(1., d)
         
     def prep_container(self, Vh=None):
+        """
+        Prepare storage of the observations
+        """
         if Vh is None:
             Vh = self.Vh
         # storage for observations
@@ -64,14 +82,17 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.B.init_vector(self.d_snapshot, 0)
     
     def get_observations(self, pde=None, nref=0, init=None):
+        """
+        Get the observations at given locations and time points
+        """
         # pde for observations
         if pde is None:
             mesh = self.Vh.mesh()
-            for i in range(nref): mesh = dl.refine(mesh)
+            for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
             pde = TimeDependentAD(mesh)
         elif nref>0:
             mesh = pde.mesh
-            for i in range(nref): mesh = dl.refine(mesh)
+            for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
             pde = TimeDependentAD(mesh)
         # initial condition
         if init is None:
@@ -91,6 +112,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
         return self.d.copy()
     
     def observe(self, x, obs):
+        """
+        Observation operator
+        """
         obs.zero()
         
         for t in self.observation_times:
@@ -99,6 +123,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
             obs.store(self.Bu_snapshot, t)
             
     def cost(self, x):
+        """
+        Compute misfit
+        """
         c = 0
         for t in self.observation_times:
             x[STATE].retrieve(self.u_snapshot, t)
@@ -110,6 +137,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
         return c/(2.*self.noise_variance)
     
     def grad(self, i, x, out):
+        """
+        Compute the gradient of misfit
+        """
         out.zero()
         if i == STATE:
             for t in self.observation_times:
@@ -152,6 +182,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
         out.zero()
     
     def plot_data(self, times, figsz=(12,5)):
+        """
+        Plot the observations with its values u(x, t) at fixed locations for given time points
+        """
         n=len(times)
         nrow=np.floor(np.sqrt(n)).astype('int')
         ncol=np.ceil(np.sqrt(n)).astype('int')
@@ -170,8 +203,9 @@ class SpaceTimePointwiseStateObservation(Misfit):
 if __name__ == '__main__':
     np.random.seed(2020)
 #     # define pde
-    mesh = (51,51)
-    pde = TimeDependentAD(mesh)
+    meshsz = (51,51)
+    eldeg = 1
+    pde = TimeDependentAD(mesh=meshsz, eldeg=eldeg)
     Vh = pde.Vh[STATE]
     # obtain function space
 #     mesh = dl.Mesh('ad_10k.xml')
@@ -199,5 +233,5 @@ if __name__ == '__main__':
     plt_times=[1.,2.,3.,4.]
     fig = misfit.plot_data(plt_times, (10,9))
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    plt.savefig(os.path.join(os.getcwd(),'results/obs.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'properties/obs.png'),bbox_inches='tight')
     

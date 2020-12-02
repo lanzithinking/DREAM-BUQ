@@ -1,9 +1,18 @@
-'''
-PDE of advection-diffusion problem
+"""
+PDE of the Advection-Diffusion problem written in FEniCS-2019.1.0 and hIPPYlib-3.0
+https://hippylib.github.io/tutorials_v3.0.0/4_AdvectionDiffusionBayesian/
+-------------------------------------------------------------------------
+Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
+Shiwei Lan @ ASU, Sept. 2020
+--------------------------------------------------------------------------
 Created on Sep 23, 2020
-
-@author: shiweilan
-'''
+"""
+__author__ = "Shiwei Lan"
+__copyright__ = "Copyright 2020, The Bayesian STIP project"
+__license__ = "GPL"
+__version__ = "0.1"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 import dolfin as dl
 import ufl
@@ -19,6 +28,9 @@ sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 
 class codomain(dl.SubDomain):
+    """
+    Definition of subdomains (two rectangles) to be removed from the whole domain (square)
+    """
     def __init__(self, offset = 0, *args, **kwargs):
         self.offset = offset
         dl.SubDomain.__init__(self, *args, **kwargs)
@@ -30,7 +42,16 @@ class codomain(dl.SubDomain):
         return x[0]>=0.6+self.offset and x[0]<=0.75-self.offset and x[1]>=0.6+self.offset and x[1]<=0.85-self.offset
 
 class TimeDependentAD:
+    """
+    The Advection-Diffusion Equation:
+    u(x,t) - kappa laplace u + v dot nabla u = 0  on Omega x (0,T)
+    u(.,0) = m                                    in Omega
+    kappa nabla u dot n = 0                       on partial Omega x (0,T)
+    """
     def __init__(self, mesh=None, simulation_times=None, gls_stab=True, **kwargs):
+        """
+        Initialize the Advection-Diffusion problem
+        """
         # get mesh
         if mesh is None:
             self.mesh = dl.Mesh('ad_10k.xml')
@@ -41,6 +62,8 @@ class TimeDependentAD:
             self.mesh = mesh
         self.mpi_comm = self.mesh.mpi_comm()
         self.rank = dl.MPI.rank(self.mpi_comm)
+        # get the degree of finite element
+        self.eldeg = kwargs.pop('eldeg',2) 
         # set FEM
         self.set_FEM()
         # get simulation times
@@ -64,6 +87,9 @@ class TimeDependentAD:
         # 0-3: number of solving (forward,adjoint,2ndforward,2ndadjoint) equations respectively
     
     def generate_mesh(self, nx=52, ny=52):
+        """
+        Generate regular grid mesh instead of triangular mesh on the domain Omega
+        """
         sqmesh = dl.UnitSquareMesh(nx=nx-1, ny=ny-1)
         submf = dl.MeshFunction('size_t', sqmesh, sqmesh.topology().dim())
         submf.set_all(1)
@@ -75,13 +101,19 @@ class TimeDependentAD:
         """
         Define finite element space of advection-diffusion PDE.
         """
-        Vh_STATE = dl.FunctionSpace(self.mesh, "Lagrange", 2)
+        Vh_STATE = dl.FunctionSpace(self.mesh, "Lagrange", self.eldeg)
         ndofs = Vh_STATE.dim()
         if self.rank == 0: print( "Number of dofs: {0}".format( ndofs ) )
         self.Vh = [Vh_STATE,Vh_STATE,Vh_STATE]
         
     def computeVelocityField(self):
-        Xh = dl.VectorFunctionSpace(self.mesh,'Lagrange', 2)
+        """
+        The steady-state Navier-Stokes equation for velocity v:
+        -1/Re laplace v + nabla q + v dot nabla v = 0  in Omega
+        nabla dot v = 0                                in Omega
+        v = g                                          on partial Omega
+        """
+        Xh = dl.VectorFunctionSpace(self.mesh,'Lagrange', self.eldeg)
         Wh = dl.FunctionSpace(self.mesh, 'Lagrange', 1)
         
         mixed_element = dl.MixedElement([Xh.ufl_element(), Wh.ufl_element()])
@@ -117,6 +149,9 @@ class TimeDependentAD:
         return v
     
     def set_forms(self):
+        """
+        Set up week forms
+        """
         # Assume constant timestepping
         dt = self.simulation_times[1] - self.simulation_times[0]
         
@@ -155,6 +190,9 @@ class TimeDependentAD:
         self.solvert.set_operator(dl.as_backend_type(self.Lt) )
     
     def generate_vector(self, component = STATE):
+        """
+        generic function to generate a vector
+        """
         if component == STATE:
             u = TimeDependentVector(self.simulation_times)
             u.initialize(self.M, 0)
@@ -167,6 +205,9 @@ class TimeDependentAD:
             raise
     
     def solveFwd(self, out, x):
+        """
+        Solve the forward equation
+        """
         out.zero()
         uold = x[PARAMETER]
         out.store(uold,0) # store the initial condition
@@ -182,7 +223,9 @@ class TimeDependentAD:
         self.soln_count[0] += 1
     
     def solveAdj(self, out, x, misfit):
-        
+        """
+        Solve the adjoint equation
+        """
         grad_state = TimeDependentVector(self.simulation_times)
         grad_state.initialize(self.M, 0)
         misfit.grad(STATE, x, grad_state)
@@ -211,6 +254,9 @@ class TimeDependentAD:
         self.soln_count[1] += 1
     
     def solveFwdIncremental(self, sol, rhs):
+        """
+        Solve the 2nd order forward equation
+        """
         sol.zero()
         uold = dl.Vector()
         u = dl.Vector()
@@ -231,6 +277,9 @@ class TimeDependentAD:
         self.soln_count[2] += 1
     
     def solveAdjIncremental(self, sol, rhs):
+        """
+        Solve the 2nd order adjoint equation
+        """
         sol.zero()
         pold = dl.Vector()
         p = dl.Vector()
@@ -272,6 +321,9 @@ class TimeDependentAD:
         self.Mt_stab.mult(dp0, out)
     
     def plot_soln(self, x, times, figsz=(12,5)):
+        """
+        Plot solution u(., times)
+        """
         n=len(times)
         nrow=np.floor(np.sqrt(n)).astype('int')
         ncol=np.ceil(np.sqrt(n)).astype('int')
@@ -288,7 +340,7 @@ if __name__ == '__main__':
     np.random.seed(2020)
     # get mesh
 #     mesh = dl.Mesh('ad_10k.xml')
-    mesh = (51,51)
+    meshsz = (51,51)
 #     from mshr import Rectangle, generate_mesh
 #     domain = Rectangle(dl.Point(0,0),dl.Point(1,1)) - Rectangle(dl.Point(.25,.15),dl.Point(.5,.4)) - Rectangle(dl.Point(.6,.6),dl.Point(.75,.85))
 #     mesh = generate_mesh(domain, 20)
@@ -301,8 +353,9 @@ if __name__ == '__main__':
     observation_dt = .2
     simulation_times = np.arange(t_init, t_final+.5*dt, dt)
     # define PDE
+    eldeg = 1
     kappa = 1e-3
-    ad_diff = TimeDependentAD(mesh, simulation_times, kappa=kappa)
+    ad_diff = TimeDependentAD(mesh=meshsz, simulation_times=simulation_times, eldeg=eldeg, kappa=kappa)
     # plot mesh
 #     dl.plot(mesh)
     # set parameters of PDE
@@ -316,4 +369,4 @@ if __name__ == '__main__':
     plt_times=[0,0.4,1.,2.,3.,4.]
     fig = ad_diff.plot_soln(x[STATE], plt_times, (12,8))
     plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    plt.savefig(os.path.join(os.getcwd(),'results/solns.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'properties/solns.png'),bbox_inches='tight')

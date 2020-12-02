@@ -1,12 +1,29 @@
 '''
-Advection-Diffusion inverse problem
-Created on Sep 23, 2020
--------------------------------------------------------------------------
+The Advection-Diffusion inverse problem written in FEniCS-2019.1.0 and hIPPYlib-3.0
 https://hippylib.github.io/tutorials_v3.0.0/4_AdvectionDiffusionBayesian/
-------------------
-@author: shiweilan
+-------------------------------------------------------------------------
+Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
+Shiwei Lan @ ASU, Sept. 2020
+-------------------------------------------------------------------------
+The purpose of this script is to obtain geometric quantities, misfit, its gradient and the associated metric (Gauss-Newton) using adjoint methods.
+--To run demo:                     python advdiff.py # to compare with the finite difference method
+--To initialize problem:     e.g.  adif=advdiff(args)
+--To obtain geometric quantities:  loglik,agrad,HessApply,eigs = adif.get_geom(args) # misfit value, gradient, metric action and eigenpairs of metric resp.
+                                   which calls _get_misfit, _get_grad, and _get_HessApply resp.
+--To save PDE solutions:           adif.save()
+                                   Fwd: forward solution; Adj: adjoint solution; FwdIncremental: 2nd order forward; AdjIncremental: 2nd order adjoint.
+--To plot PDE solutions:           adif.pde.plot_soln(x, t) for state x at time t
+--------------------------------------------------------------------------
+Created on Sep 23, 2020
 '''
+__author__ = "Shiwei Lan"
+__copyright__ = "Copyright 2020, The Bayesian STIP project"
+__license__ = "GPL"
+__version__ = "0.1"
+__maintainer__ = "Shiwei Lan"
+__email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
+# import modules
 import dolfin as dl
 import ufl
 import numpy as np
@@ -74,6 +91,9 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         self.x = self.generate_vector()
         
     def setup(self,seed=2020,**kwargs):
+        """
+        Set up pde, prior, likelihood (misfit: -log(likelihood)) and posterior
+        """
         # set (common) random seed
         Random.seed=seed
         if self.nproc > 1:
@@ -95,6 +115,9 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
 #         self.post_Ga = Gaussian_apx_posterior(self.prior, eigs='hold')
     
     def generate_vector(self, component = "ALL"):
+        """
+        generic function to generate a vector for (joint) variable: [STATE(0), PARAMETER(1), ADJOINT(2)]
+        """
         if component == "ALL":
             u = TimeDependentVector(self.simulation_times)
             u.initialize(self.pde.M, 0)
@@ -119,14 +142,23 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
             raise
     
     def init_parameter(self, m):
+        """
+        Initialize PARAMETER
+        """
         self.prior.init_vector(m,0)
     
     def cost(self, x):
+        """
+        negative logarithms of [posterior, prior and likelihood] resp.
+        """
         reg = self.prior.cost(x)
         misfit = self.misfit.cost(x)
         return [reg+misfit, reg, misfit]
     
     def evalGradientParameter(self,x, mg, misfit_only=False):
+        """
+        Obtain the gradient of negative log-posterior or misfit (default) with respect to PARAMETER
+        """
         self.prior.init_vector(mg,1)
         if misfit_only == False:
             dm = x[PARAMETER] - self.prior.mean
@@ -160,6 +192,9 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         return
     
     def exportState(self, x, filename, varname):
+        """
+        Export the joint variables of (PARAMETER(1) and) STATE(0)
+        """
         out_file = dl.XDMFFile(self.mpi_comm, filename)
         out_file.parameters["functions_share_mesh"] = True
         out_file.parameters["rewrite_function_mesh"] = False
@@ -333,44 +368,42 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         if self.rank == 0:
             sep = "\n"+"#"*80+"\n"
             print( sep, "Find the MAP point", sep)
-        # setup solver
-#         m0 = self.prior.mean.copy()
-#         if rand_init:
-#             noise = dl.Vector()
-#             self.prior.init_vector(noise,"noise")
-#             Random.normal(noise, 1., True)
-#             self.prior.sample(noise,m0)
-        m0 = self.prior.sample(add_mean=True) if rand_init else self.prior.mean.copy()
+        # set up initial point
+        m = self.prior.sample() if rand_init else self.generate_vector(PARAMETER)
+        self.x = self.generate_vector()
+        self.x[PARAMETER] = m
+        self.pde.solveFwd(self.x[STATE], self.x)
+        mg = self._get_grad(m,MF_only=False)
+        # set up solver
         solver = CGSolverSteihaug()
-        H = self._get_HessApply(m0,MF_only=False)
+        H = self._get_HessApply(m,MF_only=False)
         solver.set_operator(H)
         if preconditioner=='posterior':
-            eigs = self.get_eigs(m0)
+            eigs = self.get_eigs(m)
             self.post_Ga = GaussianLRPosterior(self.prior, eigs[0], eigs[1])
             P = self.post_Ga.Hlr
         elif preconditioner=='prior':
             P = self.prior.Rsolver
         solver.set_preconditioner( P )
         solver.parameters["rel_tolerance"] = 1e-6
-        solver.parameters["abs_tolerance"] = 1e-9
-        solver.parameters["max_iter"]      = 25
+#         solver.parameters["abs_tolerance"] = 1e-10
+#         solver.parameters["max_iter"]      = 100
         if self.rank == 0:
             solver.parameters["print_level"] = 0 
         else:
             solver.parameters["print_level"] = -1
-        mg0 = self._get_grad(m0)
         # solve for MAP
         start = time.time()
-        solver.solve(m0, -mg0)
+        solver.solve(m, -mg)
         end = time.time()
-        self.x[PARAMETER] = m0
+        self.x[PARAMETER] = m
         self.pde.solveFwd(self.x[STATE],self.x)
         MAP = self.x
         if self.rank == 0:
             print('\nTime used is %.4f' % (end-start))
         
         if SAVE:
-            fld_name='results'
+            fld_name='properties'
             self._check_folder(fld_name)
             self.exportState(self.x, os.path.join(fld_name,"MAP.xdmf"), "MAP")
         
@@ -440,8 +473,7 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         if hasattr(self,'meshsz') and V is None:
             Vh_P1 = dl.FunctionSpace(self.mesh,'Lagrange',1)
             f = dl.Function(Vh_P1)
-            d2v = dl.dof_to_vertex_map(Vh_P1)
-            f.vector().set_local(im.flatten()[self.marker][d2v])
+            f.vector().set_local(im.flatten()[self.marker] if self.pde.Vh[STATE].ufl_element().degree()==1 else im.flatten()[self.marker][dl.dof_to_vertex_map(Vh_P1)])
 #             dl.plot(f)
             vec = f.vector()
         else:
@@ -466,7 +498,7 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         Demo to check results with the adjoint method against the finite difference method.
         """
         # random sample parameter
-        parameter = self.prior.sample(add_mean=True)
+        parameter = self.prior.sample(add_mean=False)
 #         true_init = dl.Expression('min(0.5,exp(-100*(pow(x[0]-0.35,2) +  pow(x[1]-0.7,2))))', element=self.pde.Vh[STATE].ufl_element())
 #         parameter = dl.interpolate(true_init, self.pde.Vh[STATE]).vector()
         
@@ -535,11 +567,11 @@ if __name__ == '__main__':
     np.random.seed(seed)
     # define Bayesian inverse problem
 #     mesh = dl.Mesh('ad_10k.xml')
-    mesh = (51,51)
-    kappa = 1e-3
+    meshsz = (51,51)
+    eldeg = 1
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=mesh, kappa=kappa, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
 #     # test
 #     adif.test(1e-8)
 #     # obtain MAP
@@ -547,7 +579,7 @@ if __name__ == '__main__':
 #     fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
 #     plt.colorbar(fig)
 # #     plt.show()
-#     plt.savefig(os.path.join(os.getcwd(),'results/map.png'),bbox_inches='tight')
+#     plt.savefig(os.path.join(os.getcwd(),'properties/map.png'),bbox_inches='tight')
     # conversion
     v = adif.prior.sample()
     im = adif.vec2img(v)
@@ -570,4 +602,4 @@ if __name__ == '__main__':
     from util.common_colorbar import common_colorbar
     fig=common_colorbar(fig,axes,sub_figs)
 #     plt.show()
-    plt.savefig(os.path.join(os.getcwd(),'results/conversion.png'),bbox_inches='tight')
+    plt.savefig(os.path.join(os.getcwd(),'properties/conversion.png'),bbox_inches='tight')
