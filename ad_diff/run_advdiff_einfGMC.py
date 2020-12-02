@@ -6,6 +6,7 @@ Shiwei Lan @ ASU, 2020
 # modules
 import os,argparse,pickle
 import numpy as np
+import dolfin as df
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 
@@ -129,7 +130,7 @@ def main():
     filename=os.path.join(e_infGMC.savepath,'AdvDiff_'+e_infGMC.filename+'_'+args.emus[args.emuNO]+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-    soln_count=adif.soln_count
+    soln_count=adif.pde.soln_count
     pickle.dump([meshsz,rel_noise,nref,soln_count,args],f)
     f.close()
 

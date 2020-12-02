@@ -38,7 +38,7 @@ tf.random.set_seed(seed)
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=1)
-    parser.add_argument('emuNO', nargs='?', type=int, default=0)
+    parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('aeNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
@@ -210,7 +210,7 @@ def main():
     filename=os.path.join(dream.savepath,'AdvDiff_'+dream.filename+'_'+args.emus[args.emuNO]+'_'+args.aes[args.aeNO]+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-    soln_count=adif_latent.soln_count
+    soln_count=adif_latent.pde.soln_count
     pickle.dump([meshsz,meshsz_latent,rel_noise,nref,soln_count,args],f)
     f.close()
 
