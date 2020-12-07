@@ -203,7 +203,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
 if __name__ == '__main__':
     np.random.seed(2020)
 #     # define pde
-    meshsz = (51,51)
+    meshsz = (61,61)
     eldeg = 1
     pde = TimeDependentAD(mesh=meshsz, eldeg=eldeg)
     Vh = pde.Vh[STATE]

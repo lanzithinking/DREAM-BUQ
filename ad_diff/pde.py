@@ -340,7 +340,7 @@ if __name__ == '__main__':
     np.random.seed(2020)
     # get mesh
 #     mesh = dl.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
 #     from mshr import Rectangle, generate_mesh
 #     domain = Rectangle(dl.Point(0,0),dl.Point(1,1)) - Rectangle(dl.Point(.25,.15),dl.Point(.5,.4)) - Rectangle(dl.Point(.6,.6),dl.Point(.75,.85))
 #     mesh = generate_mesh(domain, 20)

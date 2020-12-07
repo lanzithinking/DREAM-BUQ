@@ -7,32 +7,11 @@ import dolfin as df
 import tensorflow as tf
 import sys,os
 sys.path.append( "../" )
-from util.dolfin_gadget import vec2fun
+from util.dolfin_gadget import *
 from util.multivector import *
 from util.Eigen import *
 from posterior import *
 
-# functions to convert vectors between P1 and Pn
-def vinP1(v, V):
-    """project v to P1 space"""
-    mesh = V.mesh()
-    V_P1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
-    d2v = df.dof_to_vertex_map(V_P1)
-    f = df.Function(V)
-    f.vector().set_local(v)
-#     vec = df.Function(V_P1).vector()
-    vec = df.Vector(mesh.mpi_comm(),mesh.num_vertices())
-    vec.set_local(f.compute_vertex_values(mesh)[d2v])
-    return vec
-
-def vinP(v, V):
-    """project v to Pn space"""
-    V_P1 = df.FunctionSpace(V.mesh(), V.ufl_element().family(), 1)
-    f_P1 = df.Function(V_P1)
-    f_P1.vector().set_local(v)
-    f = df.Function(V)
-    f.interpolate(f_P1)
-    return f.vector()
 
 def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
     loglik=None; gradlik=None; metact=None; rtmetact=None; eigs=None
@@ -53,7 +32,7 @@ def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
         inP1 = kwargs.pop('inP1',False)
         gradlik_ = emulator.gradient(u_input, ll_f)
         if type(emulator).__name__=='DNN':
-            gradlik = vec2fun(gradlik_,df.FunctionSpace(bip.prior.V.mesh(), 'Lagrange', 1)).vector() if eldeg==1 or inP1 else vinP(gradlik_, bip.prior.V)
+            gradlik = vec2fun(gradlik_,df.FunctionSpace(bip.prior.V.mesh(), 'Lagrange', 1)).vector() if eldeg==1 or inP1 else vinPn(gradlik_, bip.prior.V)
         elif type(emulator).__name__=='CNN':
             gradlik = bip.img2vec(gradlik_, bip.prior.V if eldeg>1 and not inP1 else None)
         if whitened:
@@ -63,7 +42,7 @@ def geom(unknown,bip,emulator,geom_ord=[0],whitened=False,**kwargs):
         jac_ = emulator.jacobian(u_input)
         n_obs = len(bip.misfit.obs)
         jac = MultiVector(unknown,n_obs)
-        [jac[i].set_local({'DNN':jac_[i] if eldeg==1 else vinP(jac_[i],bip.prior.V),'CNN':bip.img2vec(jac_[i], bip.prior.V if eldeg>1 else None)}[type(emulator).__name__]) for i in range(n_obs)]
+        [jac[i].set_local({'DNN':jac_[i] if eldeg==1 else vinPn(jac_[i],bip.prior.V),'CNN':bip.img2vec(jac_[i], bip.prior.V if eldeg>1 else None)}[type(emulator).__name__]) for i in range(n_obs)]
         def _get_metact_misfit(u_actedon): # GNH
             if type(u_actedon) is not df.Vector:
                 u_actedon = bip.prior.gen_vector(u_actedon)

@@ -15,11 +15,12 @@ from util.common_colorbar import common_colorbar
 
 seed=2020
 ## define the inverse problem ##
-meshsz = (51,51)
-eldeg = 2
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-adif = advdiff(mesh=meshsz, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 
@@ -155,7 +156,7 @@ for i,ax in enumerate(axes.flat):
     if i==0:
         # plot MAP
         try:
-            f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'results/MAP.xdmf'))
+            f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'properties/MAP.xdmf'))
             MAP=df.Function(adif.prior.V,name="MAP")
             f.read_checkpoint(MAP,'m',0)
             f.close()

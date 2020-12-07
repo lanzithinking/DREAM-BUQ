@@ -164,3 +164,32 @@ def img2fun(im,V):
     else:
         raise AttributeError('Not supported!')
     return f
+
+# functions to convert vectors between P1 and Pn
+def vinP1(v, V):
+    """project v from Pn to P1 space"""
+    if len(v)==V.dim():
+        vec = v
+    else:
+        mesh = V.mesh()
+        V_P1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
+        d2v = df.dof_to_vertex_map(V_P1)
+        f = df.Function(V)
+        f.vector().set_local(v)
+    #     vec = df.Function(V_P1).vector()
+        vec = df.Vector(mesh.mpi_comm(),mesh.num_vertices())
+        vec.set_local(f.compute_vertex_values(mesh)[d2v])
+    return vec
+
+def vinPn(v, V):
+    """project v from P1 to Pn space"""
+    if len(v)==V.dim():
+        vec = v
+    else:
+        V_P1 = df.FunctionSpace(V.mesh(), V.ufl_element().family(), 1)
+        f_P1 = df.Function(V_P1)
+        f_P1.vector().set_local(v)
+        f = df.Function(V)
+        f.interpolate(f_P1)
+        vec = f.vector()
+    return vec

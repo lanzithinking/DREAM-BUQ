@@ -21,15 +21,17 @@ tf.random.set_seed(seed)
 
 ## define Advection-Diffusion inverse problem ##
 # mesh = dl.Mesh('ad_10k.xml')
-meshsz = (51,51)
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 # latent
-mesh_latent = (21,21)
-pde_latent = TimeDependentAD(mesh_latent)
+meshsz_latent = (21,21)
+pde_latent = TimeDependentAD(mesh=meshsz_latent, eldeg=eldeg)
 V_latent = pde_latent.Vh[0]
 # algorithms
 algs=['EKI','EKS']
@@ -39,7 +41,7 @@ alg_no=1
 # define the autoencoder (AE)
 # load data
 ensbl_sz = 500
-folder = './train_NN'
+folder = './train_NN_eldeg'+str(eldeg)
 loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
 X=loaded['X']
 # pre-processing: scale X to 0-1
@@ -60,22 +62,23 @@ half_depth=3; latent_dim=V_latent.dim()
 droprate=0.
 # activation='linear'
 # activation=lambda x:1.1*x
-activation=tf.keras.layers.LeakyReLU(alpha=1.5)
+# activation=tf.keras.layers.LeakyReLU(alpha=1.2)
+activation='elu'
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
 lambda_=0. # contractive autoencoder
 ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
                activation=activation, optimizer=optimizer)
-folder='./train_NN/AE/saved_model'
-if not os.path.exists(folder): os.makedirs(folder)
+savepath=folder+'/AE/saved_model'
+if not os.path.exists(savepath): os.makedirs(savepath)
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
 f_name=['ae_'+i+'_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime for i in ('fullmodel','encoder','decoder')]
 try:
-    ae.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
+    ae.model=load_model(os.path.join(savepath,f_name[0]+'.h5'),custom_objects={'loss':None})
     print(f_name[0]+' has been loaded!')
-    ae.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
+    ae.encoder=load_model(os.path.join(savepath,f_name[1]+'.h5'),custom_objects={'loss':None})
     print(f_name[1]+' has been loaded!')
-    ae.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
+    ae.decoder=load_model(os.path.join(savepath,f_name[2]+'.h5'),custom_objects={'loss':None})
     print(f_name[2]+' has been loaded!')
 except Exception as err:
     print(err)
@@ -89,9 +92,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training AE: {}'.format(t_used))
     # save AE
-    ae.model.save(os.path.join(folder,f_name[0]+'.h5'))
-    ae.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
-    ae.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
+    ae.model.save(os.path.join(savepath,f_name[0]+'.h5'))
+    ae.encoder.save(os.path.join(savepath,f_name[1]+'.h5'))
+    ae.decoder.save(os.path.join(savepath,f_name[2]+'.h5'))
 
 # plot
 import matplotlib.pyplot as plt
@@ -99,7 +102,7 @@ fig,axes = plt.subplots(nrows=1, ncols=3, sharex=True, sharey=True, figsize=(15,
 plt.ion()
 n_dif = 1000
 dif = np.zeros(n_dif)
-# loaded=np.load(file=os.path.join('./train_NN',algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+# loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
 prng=np.random.RandomState(2020)
 sel4eval = prng.choice(num_samp,size=n_dif,replace=False)
 # X=loaded['X'][sel4eval]
@@ -159,9 +162,9 @@ for n in range(n_dif):
 
 # save to file
 import pandas as pd
-folder='./train_NN/AE/summary'
-if not os.path.exists(folder): os.makedirs(folder)
-file=os.path.join(folder,'dif-'+ctime+'.txt')
+savepath=folder+'/AE/summary'
+if not os.path.exists(savepath): os.makedirs(savepath)
+file=os.path.join(savepath,'dif-'+ctime+'.txt')
 np.savetxt(file,dif)
 con_str=np.array2string(np.array(node_sizes),separator=',').replace('[','').replace(']','') if 'node_sizes' in locals() or 'node_sizes' in globals() else str(half_depth)
 # act_str=','.join([val.__name__ if type(val).__name__=='function' else val.name if callable(val) else val for val in activations.values()])
@@ -170,14 +173,14 @@ dif_sumry=[dif.min(),np.median(dif),dif.max()]
 dif_str=np.array2string(np.array(dif_sumry),precision=2,separator=',').replace('[','').replace(']','') # formatter={'float': '{: 0.2e}'.format}
 sumry_header=('Time','half_depth/node_sizes','latent_dim','droprate','activation','noise_std','contractive_lambda','dif (min,med,max)')
 sumry_np=np.array([ctime,con_str,latent_dim,droprate,act_str,noise,lambda_,dif_str])
-file=os.path.join(folder,'dif_sumry.txt')
+file=os.path.join(savepath,'dif_sumry.txt')
 if not os.path.isfile(file):
     np.savetxt(file,sumry_np[None,:],fmt="%s",delimiter='\t|',header='\t|'.join(sumry_header))
 else:
     with open(file, "ab") as f:
         np.savetxt(f,sumry_np[None,:],fmt="%s",delimiter='\t|')
 sumry_pd=pd.DataFrame(data=[sumry_np],columns=sumry_header)
-file=os.path.join(folder,'dif_sumry.csv')
+file=os.path.join(savepath,'dif_sumry.csv')
 if not os.path.isfile(file):
     sumry_pd.to_csv(file,index=False,header=sumry_header)
 else:
@@ -186,7 +189,7 @@ else:
 
 # read data and construct plot functions
 # load map
-MAP_file=os.path.join(os.getcwd(),'results/MAP.xdmf')
+MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
 u_f=df.Function(adif.prior.V, name='MAP')
 if os.path.isfile(MAP_file):
     f=df.XDMFFile(adif.mpi_comm,MAP_file)
@@ -224,5 +227,5 @@ fig=common_colorbar(fig,axes,sub_figs)
 # save plots
 f_name='ae_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime
 # fig.tight_layout(h_pad=1)
-plt.savefig(os.path.join(folder,f_name+'.png'),bbox_inches='tight')
+plt.savefig(os.path.join(savepath,f_name+'.png'),bbox_inches='tight')
 # plt.show()

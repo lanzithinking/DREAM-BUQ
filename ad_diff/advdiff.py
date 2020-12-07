@@ -567,19 +567,20 @@ if __name__ == '__main__':
     np.random.seed(seed)
     # define Bayesian inverse problem
 #     mesh = dl.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
     eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
-#     # test
-#     adif.test(1e-8)
-#     # obtain MAP
-#     map_v = adif.get_MAP(rand_init=False)
-#     fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
-#     plt.colorbar(fig)
-# #     plt.show()
-#     plt.savefig(os.path.join(os.getcwd(),'properties/map.png'),bbox_inches='tight')
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+    # test
+    adif.test(1e-8)
+    # obtain MAP
+    map_v = adif.get_MAP(rand_init=False)
+    fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
+    plt.colorbar(fig)
+#     plt.show()
+    plt.savefig(os.path.join(os.getcwd(),'properties/map.png'),bbox_inches='tight')
     # conversion
     v = adif.prior.sample()
     im = adif.vec2img(v)

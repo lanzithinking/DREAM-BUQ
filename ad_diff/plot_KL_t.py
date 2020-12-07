@@ -15,7 +15,7 @@ alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\i
 num_algs=len(algs)
 found = np.zeros(num_algs,dtype=np.bool)
 # preparation for estimates
-eldeg=2
+eldeg=1
 folder = './analysis_eldeg'+str(eldeg)
 fnames=[f for f in os.listdir(folder) if f.endswith('.pckl')]
 

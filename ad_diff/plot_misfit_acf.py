@@ -31,7 +31,7 @@ alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\i
 num_algs=len(algs)
 found = np.zeros(num_algs,dtype=np.bool)
 
-eldeg=2
+eldeg=1
 folder = './analysis_eldeg'+str(eldeg)
 fnames=[f for f in os.listdir(folder) if f.endswith('.pckl')]
 
@@ -55,7 +55,7 @@ for a in range(num_algs):
     if found[a]:
         # modify misifits to discern their traceplots
 #         misfit=-loglik[500:]-a*3
-        misfit=-loglik[500:]-a*10
+        misfit=-loglik[1000:]-a*15
         axes[0].plot(misfit,next(linecycler0),linewidth=1.25)
         # pd.tools.plotting.autocorrelation_plot(loglik[1000:], ax=axes[1],linestyle=next(linecycler))
         acorr_misfit=autocorr(misfit)

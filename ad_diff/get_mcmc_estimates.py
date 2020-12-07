@@ -20,27 +20,6 @@ from tensorflow.keras.models import load_model
 from util.dolfin_gadget import vec2fun
 from util.multivector import *
 
-# functions to convert vectors between P1 and Pn
-def vinP1(v, V):
-    """project v to P1 space"""
-    mesh = V.mesh()
-    V_P1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
-    d2v = df.dof_to_vertex_map(V_P1)
-    f = df.Function(V)
-    f.vector().set_local(v)
-#     vec = df.Function(V_P1).vector()
-    vec = df.Vector(mesh.mpi_comm(),mesh.num_vertices())
-    vec.set_local(f.compute_vertex_values(mesh)[d2v])
-    return vec
-
-def vinP(v, V):
-    """project v to Pn space"""
-    V_P1 = df.FunctionSpace(V.mesh(), V.ufl_element().family(), 1)
-    f_P1 = df.Function(V_P1)
-    f_P1.vector().set_local(v)
-    f = df.Function(V)
-    f.interpolate(f_P1)
-    return f.vector()
 
 # functions needed to make even image size
 def pad(A,width=[1]):
@@ -60,16 +39,17 @@ def chop(A,width=[1]):
 
 seed=2020
 # define the inverse problem
-meshsz = (51,51)
-eldeg = 2
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-adif = advdiff(mesh=meshsz, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 # set up latent
-meshsz_latent = (11,11)
-adif_latent = advdiff(mesh=meshsz_latent, rel_noise=rel_noise, nref=nref, seed=seed)
+meshsz_latent = (21,21)
+adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif_latent.prior.V=adif_latent.prior.Vh
 
 ##------ define networks ------##
@@ -79,7 +59,7 @@ num_algs=len(algs)
 alg_no=1
 # load data
 ensbl_sz = 500
-folder = './train_NN'
+folder = './train_NN_eldeg'+str(eldeg)
 
 ##---- AUTOENCODER ----##
 AE={0:'ae',1:'cae',2:'vae'}[0]
@@ -102,8 +82,8 @@ x_train,x_test=X[tr_idx],X[te_idx]
 if AE=='ae':
     half_depth=3; latent_dim=adif_latent.prior.V.dim()
     droprate=0.
-#     activation='linear'
-    activation=tf.keras.layers.LeakyReLU(alpha=1.5)
+    activation='elu'
+#     activation=tf.keras.layers.LeakyReLU(alpha=1.5)
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
     lambda_=0.
     autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
@@ -202,7 +182,7 @@ for i in range(num_algs):
                         else:
                             u_latin=u.get_local()[None,:]
                             u_decoded=autoencoder.decode(u_latin).flatten()
-                            u=adif.prior.gen_vector(u_decoded) if eldeg==1 else vinP(u_decoded, adif.prior.V)
+                            u=adif.prior.gen_vector(u_decoded) if eldeg==1 else vinPn(u_decoded, adif.prior.V)
 #                     else:
 #                         u=u_
                     if '_whitened_emulated' in f_i: u=adif.prior.v2u(u)
