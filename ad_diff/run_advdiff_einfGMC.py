@@ -30,11 +30,11 @@ tf.random.set_seed(seed)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
+    parser.add_argument('algNO', nargs='?', type=int, default=2)
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[1e-2,1e-5,1e-5,None,None]) # DNN: 1e-3, 1e-5, 1e-5; CNN: 
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[2e-3,8e-3,8e-3,None,None]) # DNN: 1e-2, 1e-2, 1e-2; CNN: 
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['e'+a for a in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -43,10 +43,12 @@ def main():
     ##------ define the inverse problem ------##
     ## define the Advection-Diffusion invese problem ##
 #     mesh = df.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
+    eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
     
@@ -57,7 +59,7 @@ def main():
     alg_no=1
     # load data
     ensbl_sz = 500
-    folder = './train_NN'
+    folder = './train_NN_eldeg'+str(eldeg)
     
     ##---- EMULATOR ----##
     # prepare for training data
@@ -85,10 +87,10 @@ def main():
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
                      activations=activations, optimizer=optimizer)
     elif args.emus[args.emuNO]=='cnn':
-        num_filters=[16,8,8]
-        activations={'conv':'softplus','latent':'softmax','output':'linear'}
+        num_filters=[16,8,4]
+        activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.2),'latent':tf.keras.layers.PReLU(),'output':'linear'}
         latent_dim=1024
-        droprate=.25
+        droprate=.5
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
         emulator=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
                      activations=activations, optimizer=optimizer)

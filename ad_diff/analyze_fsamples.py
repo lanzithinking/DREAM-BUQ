@@ -170,5 +170,5 @@ class ana_samp(object):
 if __name__ == '__main__':
     algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
     print('Analyzing posterior samples ...\n')
-    eldeg=2
+    eldeg=1
     _=ana_samp(algs=algs,dir_name='analysis_eldeg'+str(eldeg),PLOT=False,save_fig=True).analyze()

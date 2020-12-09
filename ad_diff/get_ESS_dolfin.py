@@ -43,22 +43,23 @@ if __name__ == '__main__':
     # define the inverse problem
     seed=2020
     np.random.seed(seed)
-    meshsz = (51,51)
+    meshsz = (61,61)
+    eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
      # define the latent (coarser) inverse problem
-    meshsz_latent = (11,11)
-    adif_latent = advdiff(mesh=meshsz_latent, rel_noise=rel_noise, nref=nref, seed=seed)
+    meshsz_latent = (21,21)
+    adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif_latent.prior.V=adif_latent.prior.Vh
     # algorithms
     algs=('pCN','infMALA','infHMC','epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC')
     alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC')
     num_algs=len(algs)
     # preparation for estimates
-    eldeg=2
     folder = './analysis_eldeg'+str(eldeg)
     fnames=[f for f in os.listdir(folder) if f.endswith('.h5')]
     num_samp=5000

@@ -8,7 +8,7 @@ import numpy as np
 
 import os, pickle
 
-TRAIN={0:'XimgY',1:'XY'}[0]
+TRAIN={0:'XimgY',1:'XY'}[1]
 whiten=False
 
 def retrieve_ensemble(bip,dir_name,f_name,ensbl_sz,max_iter,img_out=False,whiten=False):
@@ -48,16 +48,18 @@ if __name__ == '__main__':
     seed=2020
     np.random.seed(seed)
 #     mesh = df.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
+    eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     # algorithms
     algs=['EKI','EKS']
     num_algs=len(algs)
     # preparation for estimates
-    folder = './analysis'
+    folder = './analysis_eldeg'+str(eldeg)
     hdf5_files=[f for f in os.listdir(folder) if f.endswith('.h5')]
     pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
     ensbl_sz=500
@@ -115,7 +117,7 @@ if __name__ == '__main__':
                         found=False
                         pass
         if found and SAVE:
-            savepath='./train_NN/'
+            savepath='./train_NN_eldeg'+str(eldeg)
             if not os.path.exists(savepath): os.makedirs(savepath)
             ifwhiten='_whitened' if whiten else ''
             if 'Y' in TRAIN:

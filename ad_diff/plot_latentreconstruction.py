@@ -8,31 +8,9 @@ import tensorflow as tf
 import sys,os
 sys.path.append( "../" )
 from advdiff import advdiff
-# from util.dolfin_gadget import vec2fun,fun2img,img2fun
+from util.dolfin_gadget import *
 from nn.ae import AutoEncoder
 from tensorflow.keras.models import load_model
-
-# functions to convert vectors between P1 and Pn
-def vinP1(v, V):
-    """project v to P1 space"""
-    mesh = V.mesh()
-    V_P1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
-    d2v = df.dof_to_vertex_map(V_P1)
-    f = df.Function(V)
-    f.vector().set_local(v)
-#     vec = df.Function(V_P1).vector()
-    vec = df.Vector(mesh.mpi_comm(),mesh.num_vertices())
-    vec.set_local(f.compute_vertex_values(mesh)[d2v])
-    return vec
-
-def vinP(v, V):
-    """project v to Pn space"""
-    V_P1 = df.FunctionSpace(V.mesh(), V.ufl_element().family(), 1)
-    f_P1 = df.Function(V_P1)
-    f_P1.vector().set_local(v)
-    f = df.Function(V)
-    f.interpolate(f_P1)
-    return f.vector()
 
 # set random seed
 seed=2020
@@ -40,16 +18,17 @@ np.random.seed(seed)
 tf.random.set_seed(seed)
 
 # define the inverse problem
-meshsz = (51,51)
-eldeg = 2
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-adif = advdiff(mesh=meshsz, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 # define the latent (coarser) inverse problem
-meshsz_latent = (11,11)
-adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, rel_noise=rel_noise, nref=nref, seed=seed)
+meshsz_latent = (21,21)
+adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif_latent.prior.V=adif_latent.prior.Vh
 # algorithms
 algs=['EKI','EKS']
@@ -59,7 +38,7 @@ alg_no=1
 # define the autoencoder (AE)
 # load data
 ensbl_sz = 500
-folder = './train_NN'
+folder = './train_NN_eldeg'+str(eldeg)
 savepath = './analysis_eldeg'+str(eldeg)
 loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
 X=loaded['X']
@@ -77,8 +56,8 @@ x_train,x_test=X[tr_idx],X[te_idx]
 
 # define AE
 half_depth=3; latent_dim=adif_latent.prior.V.dim()
-# activation='linear'
-activation=tf.keras.layers.LeakyReLU(alpha=1.5)
+activation='elu'
+# activation=tf.keras.layers.LeakyReLU(alpha=1.5)
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
 ae=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim,
                activation=activation, optimizer=optimizer)
@@ -108,7 +87,7 @@ u_f = df.Function(adif.prior.V)
 u_f_lat = df.Function(adif_latent.prior.V)
 # read MAP
 try:
-    f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'results/MAP.xdmf'))
+    f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'properties/MAP.xdmf'))
     f.read_checkpoint(u_f,'m',0)
     f.close()
 except:
@@ -135,7 +114,7 @@ u_f_lat.vector().set_local(u_encoded.flatten())
 sub_figs[1]=df.plot(u_f_lat)
 plt.title('Latent')
 plt.axes(axes.flat[2])
-u_f.vector().set_local(u_decoded.flatten() if eldeg==1 else vinP(u_decoded.flatten(), adif.prior.V))
+u_f.vector().set_local(u_decoded.flatten() if eldeg==1 else vinPn(u_decoded.flatten(), adif.prior.V))
 sub_figs[2]=df.plot(u_f)
 plt.title('Reconstructed')
 

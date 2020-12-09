@@ -9,31 +9,11 @@ import numpy as np
 import dolfin as df
 import sys,os
 sys.path.append( "../" )
+from util.dolfin_gadget import *
 from util.multivector import *
 from util.Eigen import *
 from posterior import *
 
-# functions to convert vectors between P1 and Pn
-def vinP1(v, V):
-    """project v to P1 space"""
-    mesh = V.mesh()
-    V_P1 = df.FunctionSpace(mesh, V.ufl_element().family(), 1)
-    d2v = df.dof_to_vertex_map(V_P1)
-    f = df.Function(V)
-    f.vector().set_local(v)
-#     vec = df.Function(V_P1).vector()
-    vec = df.Vector(mesh.mpi_comm(),mesh.num_vertices())
-    vec.set_local(f.compute_vertex_values(mesh)[d2v])
-    return vec
-
-def vinP(v, V):
-    """project v to Pn space"""
-    V_P1 = df.FunctionSpace(V.mesh(), V.ufl_element().family(), 1)
-    f_P1 = df.Function(V_P1)
-    f_P1.vector().set_local(v)
-    f = df.Function(V)
-    f.interpolate(f_P1)
-    return f.vector()
 
 # functions needed to make even image size
 def pad(A,width=[1]):
@@ -69,7 +49,7 @@ def geom(unknown_lat,bip_lat,bip,autoencoder,geom_ord=[0],whitened=False,**kwarg
 #         unknown=df.Function(V).vector()
 #         unknown.set_local(autoencoder.decode(u_latin).flatten())
         u_decoded=autoencoder.decode(u_latin).flatten()
-        unknown=bip.prior.gen_vector(u_decoded) if eldeg==1 else vinP(u_decoded, bip.prior.V)
+        unknown=bip.prior.gen_vector(u_decoded) if eldeg==1 else vinPn(u_decoded, bip.prior.V)
     
     emul_geom=kwargs.pop('emul_geom',None)
     full_geom=kwargs.pop('full_geom',None)

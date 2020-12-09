@@ -204,12 +204,13 @@ if __name__=='__main__':
     # obtain function space
 #     mesh = dl.Mesh('ad_10k.xml')
 #     Vh = dl.FunctionSpace(mesh, "Lagrange", 2)
-    meshsz = (51,51)
+    meshsz = (61,61)
     eldeg = 1
     pde = TimeDependentAD(mesh=meshsz, eldeg=eldeg)
     Vh = pde.Vh[STATE]
     # define prior
-    prior = BiLaplacian(Vh)
+    gamma = 2.; delta = 10.
+    prior = BiLaplacian(Vh, gamma=gamma, delta=delta)
     
     # tests
     whiten=False

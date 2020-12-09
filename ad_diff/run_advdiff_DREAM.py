@@ -37,12 +37,12 @@ tf.random.set_seed(seed)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('aeNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[1e-2,1e-2,1e-2,None,None]) # AE [1e-2,1e-2,1e-2]
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[2e-2,1e-1,1e-1,None,None]) # AE [1e-2,1e-2,1e-2]
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['DREAM'+a for a in ('pCN','infMALA','infHMC','infmMALA','infmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','cnn'])
@@ -52,15 +52,17 @@ def main():
     ##------ define the inverse problem ------##
     ## define the Advection-Diffusion invese problem ##
 #     mesh = df.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
+    eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
     # set up latent
-    meshsz_latent = (11,11)
-    adif_latent = advdiff(mesh=meshsz_latent, rel_noise=rel_noise, nref=nref, seed=seed)
+    meshsz_latent = (21,21)
+    adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif_latent.prior.V=adif_latent.prior.Vh
         
     ##------ define networks ------##
@@ -70,7 +72,7 @@ def main():
     alg_no=1
     # load data
     ensbl_sz = 500
-    folder = './train_NN'
+    folder = './train_NN_eldeg'+str(eldeg)
 #     if not os.path.exists(folder): os.makedirs(folder)
     
     ##---- EMULATOR ----##
@@ -99,10 +101,10 @@ def main():
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
                      activations=activations, optimizer=optimizer)
     elif args.emus[args.emuNO]=='cnn':
-        num_filters=[16,8,8]
-        activations={'conv':'softplus','latent':'softmax','output':'linear'}
+        num_filters=[16,8,4]
+        activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.2),'latent':tf.keras.layers.PReLU(),'output':'linear'}
         latent_dim=1024
-        droprate=.25
+        droprate=.5
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
         emulator=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
                      activations=activations, optimizer=optimizer)
@@ -146,8 +148,8 @@ def main():
     if args.aes[args.aeNO]=='ae':
         half_depth=3; latent_dim=adif_latent.prior.V.dim()
         droprate=0.
-#         activation='linear'
-        activation=tf.keras.layers.LeakyReLU(alpha=1.5)
+        activation='elu'
+#         activation=tf.keras.layers.LeakyReLU(alpha=1.5)
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
         lambda_=0.
         autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,

@@ -32,10 +32,12 @@ def main():
 
     ## define Advection-Diffusion inverse problem ##
 #     mesh = df.Mesh('ad_10k.xml')
-    meshsz = (51,51)
+    meshsz = (61,61)
+    eldeg = 1
+    gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     adif.prior.V=adif.prior.Vh
     
     # initialization

@@ -19,10 +19,12 @@ tf.random.set_seed(seed)
 
 ## define Advection-Diffusion inverse problem ##
 # mesh = dl.Mesh('ad_10k.xml')
-meshsz = (51,51)
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 # algorithms
@@ -33,7 +35,7 @@ alg_no=1
 # define the emulator (DNN)
 # load data
 ensbl_sz = 500
-folder = './train_NN'
+folder = './train_NN_eldeg'+str(eldeg)
 loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
 X=loaded['X']
 Y=loaded['Y']
@@ -52,12 +54,12 @@ x_train,x_test=X[tr_idx],X[te_idx]
 y_train,y_test=Y[tr_idx],Y[te_idx]
 
 # define CNN
-num_filters=[16,8,8] # best for non-whiten [16,8,8]
-activations={'conv':'softplus','latent':'softmax','output':'linear'} # best for non-whiten
-# activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'linear'}
+num_filters=[16,8,4] # best for non-whiten [16,8,8]
+# activations={'conv':'softplus','latent':'softmax','output':'linear'} # best for non-whiten
+activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.2),'latent':tf.keras.layers.PReLU(),'output':'linear'}
 # activations={'conv':'relu','latent':tf.math.sin,'output':tf.keras.layers.PReLU()}
 latent_dim=1024 # best for non-whiten 256
-droprate=0.25 # best for non-whiten .5
+droprate=0.5 # best for non-whiten .5
 sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 kernel_initializers={'conv':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
@@ -66,17 +68,15 @@ cnn=CNN(x_train.shape[1:], y_train.shape[1], num_filters=num_filters, latent_dim
         activations=activations, optimizer=optimizer)
 loglik = lambda y: -0.5*tf.math.reduce_sum((y-adif.misfit.obs)**2/adif.misfit.noise_variance,axis=1)
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), (y_true-y_pred)/adif.misfit.noise_variance]
-# dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate,
-#         activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer, loss=custom_loss)
-folder='./train_NN/CNN/saved_model'
-if not os.path.exists(folder): os.makedirs(folder)
+savepath=folder+'/CNN/saved_model'
+if not os.path.exists(savepath): os.makedirs(savepath)
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
 f_name='cnn_'+algs[alg_no]+str(ensbl_sz)+'-'+ctime
 try:
-#     cnn.model=load_model(os.path.join(folder,f_name+'.h5'))
-#     cnn.model=load_model(os.path.join(folder,f_name+'.h5'),custom_objects={'loss':None})
-    cnn.model.load_weights(os.path.join(folder,f_name+'.h5'))
+#     cnn.model=load_model(os.path.join(savepath,f_name+'.h5'))
+#     cnn.model=load_model(os.path.join(savepath,f_name+'.h5'),custom_objects={'loss':None})
+    cnn.model.load_weights(os.path.join(savepath,f_name+'.h5'))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
@@ -89,9 +89,9 @@ except Exception as err:
     t_used=timeit.default_timer()-t_start
     print('\nTime used for training CNN: {}'.format(t_used))
     # save cNN
-#     cnn.model.save(os.path.join(folder,f_name+'.h5'))
-#     cnn.save(folder,f_name)
-    cnn.model.save_weights(os.path.join(folder,f_name+'.h5'))
+#     cnn.model.save(os.path.join(savepath,f_name+'.h5'))
+#     cnn.save(savepath,f_name)
+    cnn.model.save_weights(os.path.join(savepath,f_name+'.h5'))
 
 # select some gradients to evaluate and compare
 logLik = lambda x: loglik(cnn.model(x))
@@ -102,7 +102,7 @@ fig,axes = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True, figsize=(12,
 plt.ion()
 n_dif = 100
 dif = np.zeros((n_dif,2))
-loaded=np.load(file=os.path.join('./train_NN',algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY'+'.npz'))
+loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY'+'.npz'))
 prng=np.random.RandomState(2020)
 sel4eval = prng.choice(num_samp,size=n_dif,replace=False)
 X=loaded['X'][sel4eval]; Y=loaded['Y'][sel4eval]
@@ -173,9 +173,9 @@ for n in range(n_dif):
 print('Time used to calculate vs emulate gradients: {} vs {}'.format(*t_used.tolist()))
 # save to file
 import pandas as pd
-folder='./train_NN/CNN/summary'
-if not os.path.exists(folder): os.makedirs(folder)
-file=os.path.join(folder,'dif-'+ctime+'.txt')
+savepath=folder+'/CNN/summary'
+if not os.path.exists(savepath): os.makedirs(savepath)
+file=os.path.join(savepath,'dif-'+ctime+'.txt')
 np.savetxt(file,dif)
 flt_str=np.array2string(np.array(num_filters),separator=',').replace('[','').replace(']','')
 act_str=','.join([val.__name__ if type(val).__name__=='function' else val.name if callable(val) else val for val in activations.values()])
@@ -185,14 +185,14 @@ dif_grad_sumry=[dif[:,1].min(),np.median(dif[:,1]),dif[:,1].max()]
 dif_grad_str=np.array2string(np.array(dif_grad_sumry),precision=2,separator=',').replace('[','').replace(']','')
 sumry_header=('Time','num_filters','activations','latent_dim','droprate','dif_fun (min,med,max)','dif_grad (min,med,max)')
 sumry_np=np.array([ctime,flt_str,act_str,latent_dim,droprate,dif_fun_str,dif_grad_str])
-file=os.path.join(folder,'dif_sumry.txt')
+file=os.path.join(savepath,'dif_sumry.txt')
 if not os.path.isfile(file):
     np.savetxt(file,sumry_np[None,:],fmt="%s",delimiter='\t|',header='\t|'.join(sumry_header))
 else:
     with open(file, "ab") as f:
         np.savetxt(f,sumry_np[None,:],fmt="%s",delimiter='\t|')
 sumry_pd=pd.DataFrame(data=[sumry_np],columns=sumry_header)
-file=os.path.join(folder,'dif_sumry.csv')
+file=os.path.join(savepath,'dif_sumry.csv')
 if not os.path.isfile(file):
     sumry_pd.to_csv(file,index=False,header=sumry_header)
 else:
@@ -200,7 +200,7 @@ else:
 
 
 # load map
-MAP_file=os.path.join(os.getcwd(),'results/MAP.xdmf')
+MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
 u_f=df.Function(adif.prior.V, name='MAP')
 if os.path.isfile(MAP_file):
     f=df.XDMFFile(adif.mpi_comm,MAP_file)
@@ -235,5 +235,5 @@ fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.2, hspace=0)
 # save plots
 # fig.tight_layout(h_pad=1)
-plt.savefig(os.path.join(folder,f_name+'.png'),bbox_inches='tight')
+plt.savefig(os.path.join(savepath,f_name+'.png'),bbox_inches='tight')
 # plt.show()
