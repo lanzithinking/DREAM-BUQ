@@ -28,8 +28,8 @@ adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel
 #meshsz = (51,51)
 #rel_noise = .5
 #nref = 1
-#n_time = 16
-#n_spatio = 80
+n_time = 16
+n_spatio = 80
 #adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
