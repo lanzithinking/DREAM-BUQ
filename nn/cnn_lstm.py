@@ -96,7 +96,7 @@ class CNN_LSTM:
 
         #lstm [batch, timesteps, feature]=(5000*(16-1),1,80) -> output (5000*(16-1),80)
         output = LSTM(units=self.n_spatio, return_sequences=True,  activation=self.activations['lstm'], recurrent_activation='sigmoid')(output)
-        output = Reshape((self.n_time*self.n_spatio))
+        
 
         return output
 
