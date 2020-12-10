@@ -19,12 +19,18 @@ tf.random.set_seed(seed)
 
 ## define Advection-Diffusion inverse problem ##
 # mesh = dl.Mesh('ad_10k.xml')
-meshsz = (51,51)
+meshsz = (61,61)
+eldeg = 1
+gamma = 2.; delta = 10.
 rel_noise = .5
 nref = 1
-n_time = 16
-n_spatio = 80
-adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
+adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+#meshsz = (51,51)
+#rel_noise = .5
+#nref = 1
+#n_time = 16
+#n_spatio = 80
+#adif = advdiff(mesh=meshsz, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
 # algorithms
@@ -77,7 +83,7 @@ folder='./train_NN/'
 if not os.path.exists(folder): os.makedirs(folder)
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-f_name='cnn_lstm_'+algs[alg_no]+str(ensbl_sz)+'-2020-12-09-14-48-06' #ctime
+f_name='cnn_lstm_'+algs[alg_no]+str(ensbl_sz)+ctime
 keywd = 'cnn_lstm_' + algs[alg_no] + str(ensbl_sz)
 try:
 #     cnn.model=load_model(os.path.join(folder,f_name+'.h5'))
