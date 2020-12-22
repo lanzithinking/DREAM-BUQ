@@ -1,28 +1,28 @@
 #!/usr/bin/env python
 """
-Convolutional Neural Network (input) - Long Short-Term Memory (output)
+Convolutional (input) - Recurrent (output) Neural Network (input)
 Shiwei Lan @ASU, 2020
 --------------------------
-CNN-LSTM in TensorFlow 2.2
-------------------------
-Created December 9, 2020
+CNN-RNN in TensorFlow 2.2
+-------------------------
+Created December 21, 2020
 """
-__author__ = "Shiwei Lan; Shuyi Li"
+__author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.1"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense,Reshape,LSTM
+from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense,Reshape,SimpleRNN,GRU,LSTM
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
 
 
-class CNN_LSTM:
+class CNN_RNN:
     def __init__(self, input_shape, output_shape, num_filters=[16,32], kernel_size=(3,3), pool_size=(2,2), strides=(1,1), **kwargs):
         """
         Convolutional Neural Network
@@ -75,11 +75,15 @@ class CNN_LSTM:
         if self.droprate:
             output=Dropout(rate=self.droprate)(output)
         ker_ini = self.kernel_initializers['output'](output.shape[1]) if callable(self.kernel_initializers['output']) else self.kernel_initializers['output']
-        # transform original output(n_batch,temp_dim*spat_dim) to LSTM input(n_batch,temp_dim,spat_dim)
+        # transform original output(n_batch,temp_dim*spat_dim) to RNN input(n_batch,temp_dim,spat_dim)
         output = Reshape((self.output_shape[0],self.latent_dim))(output)
-        output = LSTM(units=self.output_shape[1], return_sequences=True,  activation=self.activations['lstm'], recurrent_activation=self.activations['output'],
-                      kernel_initializer=ker_ini, name='lstm')(output)
-        
+        recurr = {'output':SimpleRNN,'gru':GRU,'lstm':LSTM}[list(self.activations.keys())[-1]]
+        if len(self.activations)==3:
+            output = recurr(units=self.output_shape[1], return_sequences=True,  activation=self.activations['output'],
+                            kernel_initializer=ker_ini, name='recur')(output)
+        else:
+            output = recurr(units=self.output_shape[1], return_sequences=True,  activation=list(self.activations.values())[-1], recurrent_activation=self.activations['output'],
+                            kernel_initializer=ker_ini, name='recur')(output)
         return output
 
     
@@ -230,7 +234,7 @@ if __name__ == '__main__':
     x_train,y_train=X[:n_tr],Y[:n_tr]
     x_test,y_test=X[n_tr:],Y[n_tr:]
     
-    # define CNN-LSTM
+    # define CNN-RNN
     num_filters=[16,32]
     #activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear','lstm':'tanh'}
     activations={'conv':'softplus','latent':'softmax','output':'linear','lstm':'tanh'}
@@ -241,28 +245,28 @@ if __name__ == '__main__':
     #kernel_initializers={'conv':sin_init,'latent':sin_init,'output':'glorot_uniform'}
     kernel_initializers={'conv':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    cnnlstm=CNN_LSTM(x_train.shape[1:], y_train.shape[1:], num_filters=num_filters,latent_dim=latent_dim, droprate=droprate,
-                     activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
+    cnnrnn=CNN_RNN(x_train.shape[1:], y_train.shape[1:], num_filters=num_filters,latent_dim=latent_dim, droprate=droprate,
+                   activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
     try:
-#         cnnlstm.model=load_model('./result/cnnlstm_'+algs[alg_no]+'.h5')
-        cnnlstm.model.load_weights('./result/cnnlstm_'+algs[alg_no]+'.h5')
-        print('cnnlstm_'+algs[alg_no]+'.h5'+' has been loaded!')
+#         cnnrnn.model=load_model('./result/cnnrnn_'+algs[alg_no]+'.h5')
+        cnnrnn.model.load_weights('./result/cnnrnn_'+algs[alg_no]+'.h5')
+        print('cnnrnn_'+algs[alg_no]+'.h5'+' has been loaded!')
     except Exception as err:
         print(err)
-        print('Train CNN-LSTM...\n')
+        print('Train CNN-RNN...\n')
         epochs=100
         import timeit
         t_start=timeit.default_timer()
-        cnnlstm.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
+        cnnrnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
-        print('\nTime used for training CNN-LSTM: {}'.format(t_used))
-        # save CNN-LSTM
-#         cnnlstm.model.save('./result/cnnlstm_model.h5')
-#         cnnlstm.save('./result','cnnlstm_'+algs[alg_no])
-        cnnlstm.model.save_weights('./result','cnnlstm_'+algs[alg_no]+'.h5')
+        print('\nTime used for training CNN-RNN: {}'.format(t_used))
+        # save CNN-RNN
+#         cnnrnn.model.save('./result/cnnrnn_model.h5')
+#         cnnrnn.save('./result','cnnrnn_'+algs[alg_no])
+        cnnrnn.model.save_weights('./result','cnnrnn_'+algs[alg_no]+'.h5')
     
     # some more test
-    loglik = lambda x: -0.5*tf.math.reduce_sum((cnnlstm.model(x)-adif.misfit.obs)**2/adif.misfit.noise_variance,axis=[1,2])
+    loglik = lambda x: -0.5*tf.math.reduce_sum((cnnrnn.model(x)-adif.misfit.obs)**2/adif.misfit.noise_variance,axis=[1,2])
     import timeit
     t_used = np.zeros((1,2))
     import matplotlib.pyplot as plt
@@ -286,7 +290,7 @@ if __name__ == '__main__':
         # emulate gradient
         t_start=timeit.default_timer()
         u_img=vec2img(u)
-        dll_emul = adif.img2vec(cnnlstm.gradient(u_img[None,:,:,None], loglik))
+        dll_emul = adif.img2vec(cnnrnn.gradient(u_img[None,:,:,None], loglik))
         t_used[1] += timeit.default_timer()-t_start
         # test difference
         dif_fun = np.abs(ll_xact - ll_emul)

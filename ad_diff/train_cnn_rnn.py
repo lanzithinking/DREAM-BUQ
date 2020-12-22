@@ -1,5 +1,5 @@
 """
-This is to test CNN-LSTM in emulating (extracted) gradients compared with those exactly calculated.
+This is to test CNN-RNN in emulating (extracted) gradients compared with those exactly calculated.
 """
 
 import numpy as np
@@ -8,7 +8,7 @@ import tensorflow as tf
 import sys,os,pickle
 sys.path.append( '../' )
 from advdiff import advdiff
-from nn.cnn_lstm import CNN_LSTM
+from nn.cnn_rnn import CNN_RNN
 from tensorflow.keras.models import load_model
 
 # tf.compat.v1.disable_eager_execution() # needed to train with custom loss # comment to plot
@@ -57,48 +57,48 @@ te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
 x_train,x_test=X[tr_idx],X[te_idx]
 y_train,y_test=Y[tr_idx],Y[te_idx]
 
-# define CNN-LSTM
+# define CNN-RNN
 num_filters=[16,8,4] # best for non-whiten [16,8,8]
-# activations={'conv':'softplus','latent':'softmax','output':'linear','lstm':'tanh'} # best for non-whiten
-activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':tf.keras.layers.PReLU(),'output':'sigmoid','lstm':'tanh'}
-# activations={'conv':'relu','latent':tf.math.sin,'output':tf.keras.layers.PReLU(),'lstm':'tanh'}
+# activations={'conv':'softplus','latent':'softmax','output':'linear'} # best for non-whiten
+activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.2),'latent':tf.keras.layers.PReLU(),'output':'sigmoid','gru':'tanh'}
+# activations={'conv':'relu','latent':tf.math.sin,'output':tf.keras.layers.PReLU()}
 latent_dim=128 # best for non-whiten 256
 droprate=0.25 # best for non-whiten .5
 sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 kernel_initializers={'conv':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
 optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
-cnnlstm=CNN_LSTM(x_train.shape[1:], y_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
-                 activations=activations, optimizer=optimizer)
+cnnrnn=CNN_RNN(x_train.shape[1:], y_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim, droprate=droprate,
+               activations=activations, optimizer=optimizer)
 loglik = lambda y: -0.5*tf.math.reduce_sum((y-adif.misfit.obs)**2/adif.misfit.noise_variance,axis=[1,2])
 # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), (y_true-y_pred)/adif.misfit.noise_variance]
-savepath=folder+'/CNN_LSTM/saved_model'
+savepath=folder+'/CNN_RNN/saved_model'
 if not os.path.exists(savepath): os.makedirs(savepath)
 import time
 ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-f_name='cnn_lstm_'+algs[alg_no]+str(ensbl_sz)+ctime
+f_name='cnn_rnn_'+algs[alg_no]+str(ensbl_sz)+ctime
 try:
-#     cnnlstm.model=load_model(os.path.join(savepath,f_name+'.h5'))
-#     cnnlstm.model=load_model(os.path.join(savepath,f_name+'.h5'),custom_objects={'loss':None})
-    cnnlstm.model.load_weights(os.path.join(savepath,f_name+'.h5'))
+#     cnnrnn.model=load_model(os.path.join(savepath,f_name+'.h5'))
+#     cnnrnn.model=load_model(os.path.join(savepath,f_name+'.h5'),custom_objects={'loss':None})
+    cnnrnn.model.load_weights(os.path.join(savepath,f_name+'.h5'))
     print(f_name+' has been loaded!')
 except Exception as err:
     print(err)
-    print('Train CNN-LSTM...\n')
+    print('Train CNN-RNN...\n')
     epochs=200
     patience=0
     import timeit
     t_start=timeit.default_timer()
-    cnnlstm.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
+    cnnrnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1,patience=patience)
     t_used=timeit.default_timer()-t_start
-    print('\nTime used for training CNN-LSTM: {}'.format(t_used))
-    # save CNN-LSTM
-#     cnnlstm.model.save(os.path.join(savepath,f_name+'.h5'))
-#     cnnlstm.save(savepath,f_name)
-    cnnlstm.model.save_weights(os.path.join(savepath,f_name+'.h5'))
+    print('\nTime used for training CNN-RNN: {}'.format(t_used))
+    # save CNN-RNN
+#     cnnrnn.model.save(os.path.join(savepath,f_name+'.h5'))
+#     cnnrnn.save(savepath,f_name)
+    cnnrnn.model.save_weights(os.path.join(savepath,f_name+'.h5'))
 
 # select some gradients to evaluate and compare
-logLik = lambda x: loglik(cnnlstm.model(x))
+logLik = lambda x: loglik(cnnrnn.model(x))
 import timeit
 t_used = np.zeros(2)
 import matplotlib.pyplot as plt
@@ -129,7 +129,7 @@ for n in range(n_dif):
     # emulate gradient
     t_start=timeit.default_timer()
     ll_emul = logLik(u[None,:,:,None]).numpy()[0]
-    dll_emul = adif.img2vec(cnnlstm.gradient(u[None,:,:,None], logLik))
+    dll_emul = adif.img2vec(cnnrnn.gradient(u[None,:,:,None], logLik))
     t_used[1] += timeit.default_timer()-t_start
     # test difference
     dif_fun = np.abs(ll_xact - ll_emul)
@@ -177,7 +177,7 @@ for n in range(n_dif):
 print('Time used to calculate vs emulate gradients: {} vs {}'.format(*t_used.tolist()))
 # save to file
 import pandas as pd
-savepath=folder+'/CNN_LSTM/summary'
+savepath=folder+'/CNN_RNN/summary'
 if not os.path.exists(savepath): os.makedirs(savepath)
 file=os.path.join(savepath,'dif-'+ctime+'.txt')
 np.savetxt(file,dif)
@@ -216,7 +216,7 @@ else:
 # calculate gradient
 dll_xact = adif.get_geom(u,[0,1])[1]
 # emulate gradient
-dll_emul = adif.img2vec(cnnlstm.gradient(adif.vec2img(u)[None,:,:,None], logLik))
+dll_emul = adif.img2vec(cnnrnn.gradient(adif.vec2img(u)[None,:,:,None], logLik))
 
 # plot
 plt.rcParams['image.cmap'] = 'jet'
