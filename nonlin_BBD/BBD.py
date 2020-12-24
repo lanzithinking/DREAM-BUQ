@@ -7,7 +7,7 @@ Shiwei Lan @ ASU, 2020
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The NN-MCMC project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -88,7 +88,7 @@ class BBD:
                 if 1 in geom_ord: dlogpri=-input/self.pr_cov if np.ndim(self.pr_cov)==1 else -np.linalg.solve(self.pr_cov,input)
             else:
                 if 0 in geom_ord: logpri=-0.5*np.sum(input**2/self.pr_cov[None,:] if np.ndim(self.pr_cov)==1 else input*np.linalg.solve(self.pr_cov,input.T).T, axis=1)
-                if 1 in geom_ord: dlogpri=-input/self.pr_cov[None,:] if np.ndim(self.pr_cov)==1 else np.linalg.solve(self.pr_cov,input.T).T
+                if 1 in geom_ord: dlogpri=-input/self.pr_cov[None,:] if np.ndim(self.pr_cov)==1 else -np.linalg.solve(self.pr_cov,input.T).T
         elif type=='likelihood':
             logpri=0; dlogpri=0
         out=[]
@@ -131,6 +131,7 @@ class BBD:
         y=np.linspace(self.true_input[dim[1]]-2.,self.true_input[dim[1]]+2.)
         X,Y=np.meshgrid(x,y)
         Input=np.zeros((X.size,self.input_dim))
+#         Input=np.tile(self.true_input,(X.size,1))
         Input[:,dim[0]],Input[:,dim[1]]=X.flatten(),Y.flatten()
         Z=self.logpdf(Input, type)[0].reshape(X.shape)
         levels=kwargs.pop('levels',20)
@@ -140,6 +141,7 @@ class BBD:
             y=np.linspace(self.true_input[dim[1]]-2.,self.true_input[dim[1]]+2.,10)
             X_,Y_=np.meshgrid(x,y)
             Input=np.zeros((X_.size,self.input_dim))
+#             Input=np.tile(self.true_input,(X_.size,1))
             Input[:,dim[0]],Input[:,dim[1]]=X_.flatten(),Y_.flatten()
             G=self.logpdf(Input, type, [1])[0]
             U,V=G[:,dim[0]].reshape(X_.shape),G[:,dim[1]].reshape(X_.shape)

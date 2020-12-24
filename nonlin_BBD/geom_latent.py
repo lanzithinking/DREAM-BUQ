@@ -69,11 +69,13 @@ def geom(unknown_lat,autoencoder,geom_ord=[0],whitened=False,**kwargs):
         if whitened=='latent':
             cholC = cholC = np.linalg.cholesky(bip.prior['cov'])
             gradlik = cholC.T.dot(gradlik)
-        jac=autoencoder.jacobian(u_latin,'decode')
+#         jac=autoencoder.jacobian(u_latin,'decode')
         if 'Conv' in type(autoencoder).__name__:
+            jac=autoencoder.jacobian(u_latin,'decode')
             jac=pad(jac,width*2 if autoencoder.activations['latent'] is None else width+(0,))
             jac=jac.reshape((np.prod(jac.shape[:2]),np.prod(jac.shape[2:])))
-        gradlik=jac.T.dot(gradlik)
+#         gradlik=jac.T.dot(gradlik)
+        gradlik=autoencoder.jacvec(u_latin,gradlik[None,:])
 #         print('time consumed:{}'.format(timeit.default_timer()-t_start))
     
     if any(s>=1.5 for s in geom_ord):
